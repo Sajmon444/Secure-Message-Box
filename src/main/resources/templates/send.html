@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Wyślij wiadomość</title>
+    <style>
+        body { font-family: Arial, sans-serif; background:#f0f2f5; margin:0; padding:20px; }
+        .container { max-width:520px; margin:40px auto; background:white;
+            padding:32px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
+        h2 { margin-top:0; color:#333; }
+        label { display:block; margin:12px 0 4px; font-size:14px; color:#555; }
+        select, textarea, input[type="password"] {
+            width:100%; padding:9px; border:1px solid #ccc; border-radius:4px;
+            box-sizing:border-box; font-size:14px; }
+        textarea { resize:vertical; height:100px; }
+        button { margin-top:16px; width:100%; padding:10px; background:#4a6fa5;
+            color:white; border:none; border-radius:4px; font-size:15px; cursor:pointer; }
+        button:hover { background:#3a5a8a; }
+        .msg-ok  { background:#eafaf1; color:#1e8449; padding:10px; border-radius:4px; margin-bottom:12px; }
+        .msg-err { background:#fdecea; color:#c0392b; padding:10px; border-radius:4px; margin-bottom:12px; }
+        .nav-link { display:inline-block; margin-top:16px; font-size:13px; color:#4a6fa5; text-decoration:none; }
+        .nav-link:hover { text-decoration:underline; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>✉ Wyślij wiadomość</h2>
+
+    <div th:if="${successMsg}" class="msg-ok"  th:text="${successMsg}"></div>
+    <div th:if="${errorMsg}"   class="msg-err" th:text="${errorMsg}"></div>
+
+    <form th:action="@{/messages/send}" method="post">
+
+        <label for="receiverId">Odbiorca</label>
+        <select id="receiverId" name="receiverId" required>
+            <option value="">-- wybierz użytkownika --</option>
+            <th:block th:each="u : ${users}">
+                <!-- pomijamy siebie na liście -->
+                <option th:unless="${u.username == currentUser}"
+                        th:value="${u.id}"
+                        th:text="${u.username}"></option>
+            </th:block>
+        </select>
+
+        <label for="category">Kategoria</label>
+        <select id="category" name="category" required>
+            <option value="STANDARD">Zwykła</option>
+            <option value="CONFIDENTIAL">Poufna</option>
+        </select>
+
+        <label for="content">Treść wiadomości</label>
+        <textarea id="content" name="content" placeholder="Wpisz treść..." required></textarea>
+
+        <label for="msgPassword">Hasło wiadomości (do szyfrowania)</label>
+        <input type="password" id="msgPassword" name="msgPassword"
+               placeholder="Ustaw hasło do tej wiadomości" required/>
+
+        <button type="submit">Wyślij</button>
+    </form>
+
+    <a th:href="@{/messages/inbox}" class="nav-link">📥 Przejdź do skrzynki</a>
+    &nbsp;|&nbsp;
+    <a th:href="@{/dashboard}" class="nav-link">← Dashboard</a>
+</div>
+</body>
+</html>

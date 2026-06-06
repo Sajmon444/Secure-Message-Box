@@ -34,6 +34,11 @@ public class SecretMessage {
     @Column(name = "encrypted_content", nullable = false, columnDefinition = "TEXT")
     private String encryptedContent;
 
+    // Wektor inicjalizacyjny AES — niezbędny do odszyfrowania wiadomości.
+    // Przechowywany jako Base64 w kolumnie secret_iv.
+    @Column(name = "secret_iv", nullable = false, length = 64)
+    private String secretIv;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
