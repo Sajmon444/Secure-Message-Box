@@ -44,7 +44,6 @@ public class MessageService {
         MessageCategory category = categoryRepository.findByCategoryName(categoryName)
                 .orElseThrow(() -> new RuntimeException("Brak kategorii: " + categoryName));
 
-        // Generujemy IV i szyfrujemy
         String iv = encryptionService.generateIv();
         String encrypted = encryptionService.encryptWithIv(plainText, messagePassword, iv);
 
@@ -53,19 +52,24 @@ public class MessageService {
         msg.setReceiver(receiver);
         msg.setCategory(category);
         msg.setEncryptedContent(encrypted);
-        msg.setSecretIv(iv); // zapisujemy IV w bazie
+        msg.setSecretIv(iv);
 
         messageRepository.saveAndFlush(msg);
     }
 
-    /** Pobiera wiadomości dla zalogowanego użytkownika (skrzynka odbiorcza). */
+    /**
+     * Pobiera skrzynkę odbiorczą z eagerly załadowanymi relacjami (sender, receiver, category).
+     * JOIN FETCH zapobiega LazyInitializationException gdy Thymeleaf odczytuje msg.sender.username.
+     */
+    @Transactional(readOnly = true)
     public List<SecretMessage> getInbox(String username) {
         AppUser user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Brak użytkownika"));
-        return messageRepository.findByReceiverIdOrderByCreatedAtDesc(user.getId());
+        return messageRepository.findInboxWithDetails(user.getId());
     }
 
     /** Deszyfruje konkretną wiadomość. Rzuca wyjątek jeśli hasło złe. */
+    @Transactional(readOnly = true)
     public String decryptMessage(Long messageId, String messagePassword) throws Exception {
         SecretMessage msg = messageRepository.findById(messageId)
                 .orElseThrow(() -> new RuntimeException("Brak wiadomości"));
