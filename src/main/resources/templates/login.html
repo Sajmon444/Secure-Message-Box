@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <title>Logowanie – Secure Message Box</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .box {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            width: 320px;
+        }
+        h2 {
+            margin-top: 0;
+            margin-bottom: 24px;
+            text-align: center;
+            color: #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 14px;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            font-size: 14px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #4a6fa5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #3a5a8a;
+        }
+        .msg-error {
+            background: #fdecea;
+            color: #c0392b;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .msg-success {
+            background: #eafaf1;
+            color: #1e8449;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .link-row {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+        }
+        .link-row a {
+            color: #4a6fa5;
+            text-decoration: none;
+        }
+        .link-row a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>🔐 Logowanie</h2>
+
+    <!-- Komunikat błędu logowania -->
+    <div th:if="${errorMsg}" class="msg-error" th:text="${errorMsg}"></div>
+
+    <!-- Komunikat po wylogowaniu -->
+    <div th:if="${logoutMsg}" class="msg-success" th:text="${logoutMsg}"></div>
+
+    <!-- Komunikat po rejestracji -->
+    <div th:if="${param.registered}" class="msg-success">
+        Rejestracja zakończona! Możesz się teraz zalogować.
+    </div>
+
+    <!-- Spring Security odbiera POST /login samodzielnie -->
+    <form th:action="@{/login}" method="post">
+        <label for="username">Nazwa użytkownika</label>
+        <input type="text" id="username" name="username" placeholder="Wpisz nazwę użytkownika" required autofocus/>
+
+        <label for="password">Hasło</label>
+        <input type="password" id="password" name="password" placeholder="Wpisz hasło" required/>
+
+        <button type="submit">Zaloguj się</button>
+    </form>
+
+    <div class="link-row">
+        Nie masz konta? <a th:href="@{/register}">Zarejestruj się</a>
+    </div>
+</div>
+</body>
+</html>
