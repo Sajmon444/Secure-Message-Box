@@ -2,13 +2,10 @@ package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.entity.AppUser;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.AppUserRepository;
 
-/**
- * Serwis odpowiedzialny za rejestrację nowych użytkowników.
- * Hasło jest haszowane BCryptem przed zapisem do bazy.
- */
 @Service
 public class AuthService {
 
@@ -20,20 +17,17 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    /**
-     * Rejestruje nowego użytkownika.
-     * @return true jeśli się udało, false jeśli nazwa użytkownika jest już zajęta
-     */
+    @Transactional
     public boolean register(String username, String rawPassword) {
         if (appUserRepository.existsByUsername(username)) {
-            return false; // użytkownik już istnieje
+            return false;
         }
 
         AppUser newUser = new AppUser();
         newUser.setUsername(username);
-        newUser.setPasswordHash(passwordEncoder.encode(rawPassword)); // BCrypt!
+        newUser.setPasswordHash(passwordEncoder.encode(rawPassword));
 
-        appUserRepository.save(newUser);
+        appUserRepository.saveAndFlush(newUser); // flush wymusza natychmiastowy INSERT do bazy
         return true;
     }
 }
