@@ -5,18 +5,18 @@
     <title>Skrzynka odbiorcza</title>
     <style>
         body { font-family: Arial, sans-serif; background:#f0f2f5; margin:0; padding:20px; }
-        .container { max-width:680px; margin:40px auto; }
+        .container { max-width:700px; margin:40px auto; }
         h2 { color:#333; }
-        .msg-card {
-            background:white; border-radius:6px; padding:16px 20px;
-            margin-bottom:14px; box-shadow:0 1px 6px rgba(0,0,0,0.09);
-        }
+        .msg-card { background:white; border-radius:6px; padding:16px 20px;
+            margin-bottom:14px; box-shadow:0 1px 6px rgba(0,0,0,0.09); }
         .msg-meta { font-size:12px; color:#888; margin-bottom:6px; }
         .msg-meta span { margin-right:12px; }
-        .encrypted { font-family:monospace; font-size:12px; color:#aaa;
-            word-break:break-all; margin:6px 0 10px; }
-        .decrypt-form { display:flex; gap:8px; align-items:center; margin-top:8px; }
-        .decrypt-form input { flex:1; padding:7px; border:1px solid #ccc;
+        .badge-standard { background:#e8f5e9; color:#2e7d32; padding:2px 8px;
+            border-radius:10px; font-size:11px; font-weight:bold; }
+        .badge-e2ee     { background:#e3f2fd; color:#1565c0; padding:2px 8px;
+            border-radius:10px; font-size:11px; font-weight:bold; }
+        .decrypt-form { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+        .decrypt-form input { flex:1; min-width:180px; padding:7px; border:1px solid #ccc;
             border-radius:4px; font-size:13px; }
         .decrypt-form button { padding:7px 16px; background:#27ae60; color:white;
             border:none; border-radius:4px; cursor:pointer; font-size:13px; }
@@ -25,6 +25,7 @@
             padding:10px; border-radius:4px; font-size:14px; margin-top:8px; }
         .err-text   { background:#fdecea; border-left:4px solid #e74c3c;
             padding:10px; border-radius:4px; font-size:14px; margin-top:8px; }
+        .hint { font-size:11px; color:#999; margin-top:4px; }
         .empty { color:#888; font-style:italic; }
         .nav-link { font-size:13px; color:#4a6fa5; text-decoration:none; }
         .nav-link:hover { text-decoration:underline; }
@@ -46,31 +47,43 @@
 
         <div class="msg-meta">
             <span>Od: <strong th:text="${msg.sender.username}">nadawca</strong></span>
-            <span>Kategoria: <strong th:text="${msg.category.categoryName}">kat</strong></span>
+            <span th:if="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}">
+                <span class="badge-e2ee">🔒 Poufna E2EE</span>
+            </span>
+            <span th:unless="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}">
+                <span class="badge-standard">🔑 Zwykła (AES)</span>
+            </span>
             <span th:text="${#temporals.format(msg.createdAt, 'dd.MM.yyyy HH:mm')}">data</span>
         </div>
 
-        <!-- Zaszyfrowana treść (skrócona podgląd) -->
-        <div class="encrypted"
-             th:text="'[zaszyfrowane] ' + ${#strings.abbreviate(msg.encryptedContent, 60)}">
-        </div>
-
-        <!-- Odszyfrowana treść — pokazuje się tylko dla tej wiadomości -->
         <div th:if="${decryptedId == msg.id}" class="plain-text">
             🔓 <strong>Odszyfrowana treść:</strong><br/>
             <span th:text="${decryptedText}"></span>
         </div>
 
-        <!-- Błąd odszyfrowania -->
         <div th:if="${decryptErrorId == msg.id}" class="err-text">
             ❌ <span th:text="${decryptError}"></span>
         </div>
 
-        <!-- Formularz odszyfrowania -->
-        <form th:action="@{/messages/decrypt/{id}(id=${msg.id})}" method="post"
-              class="decrypt-form">
-            <input type="password" name="msgPassword" placeholder="Podaj hasło wiadomości" required/>
-            <button type="submit">Odszyfruj</button>
+        <form th:if="${decryptedId != msg.id}" th:action="@{/messages/decrypt/{id}(id=${msg.id})}" method="post">
+            <div class="decrypt-form">
+                <input th:if="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}"
+                       type="password" name="msgPassword"
+                       placeholder="Wklej swój klucz prywatny RSA" required/>
+
+                <input th:unless="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}"
+                       type="password" name="msgPassword"
+                       placeholder="Podaj hasło wiadomości" required/>
+
+                <button type="submit">Odszyfruj</button>
+            </div>
+
+            <div class="hint" th:if="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}">
+                Wklej swój klucz prywatny RSA (Base64) — otrzymałeś go podczas rejestracji.
+            </div>
+            <div class="hint" th:unless="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}">
+                Podaj hasło ustalate przez nadawcę przy wysyłaniu wiadomości.
+            </div>
         </form>
 
     </div>

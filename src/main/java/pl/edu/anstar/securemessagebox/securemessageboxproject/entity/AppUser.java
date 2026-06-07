@@ -24,6 +24,10 @@ public class AppUser {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
+    // Klucz publiczny RSA (Base64) — wysyłany na serwer podczas rejestracji.
+    // Klucz prywatny NIGDY nie trafia na serwer — użytkownik musi go zapisać lokalnie.
+    @Column(name = "public_key", columnDefinition = "TEXT")
+    private String publicKey;
 
     @OneToMany(mappedBy = "sender", fetch = FetchType.LAZY)
     private List<SecretMessage> sentMessages;

@@ -20,53 +20,36 @@ public class MessageController {
         this.messageService = messageService;
     }
 
-    // ----------------------------------------------------------------
-    // WYŚLIJ WIADOMOŚĆ — GET (formularz)
-    // ----------------------------------------------------------------
-
     @GetMapping("/send")
-    public String sendPage(@AuthenticationPrincipal UserDetails user, Model model) {
-        model.addAttribute("users", messageService.getAllUsers());
-        model.addAttribute("currentUser", user.getUsername());
+    public String sendPage() {
         return "send";
     }
 
-    // ----------------------------------------------------------------
-    // WYŚLIJ WIADOMOŚĆ — POST (obsługa formularza)
-    // ----------------------------------------------------------------
-
     @PostMapping("/send")
     public String sendSubmit(@AuthenticationPrincipal UserDetails user,
-                             @RequestParam("receiverId") Long receiverId,
+                             @RequestParam("receiverUsername") String receiverUsername,
                              @RequestParam("category") String category,
                              @RequestParam("content") String content,
                              @RequestParam("msgPassword") String msgPassword,
                              Model model) {
         try {
-            messageService.sendMessage(user.getUsername(), receiverId, category, content, msgPassword);
-            model.addAttribute("successMsg", "Wiadomość wysłana!");
+            messageService.sendMessage(user.getUsername(), receiverUsername, category, content, msgPassword);
+            model.addAttribute("successMsg", "Wiadomość wysłana pomyślnie!");
+        } catch (IllegalArgumentException e) {
+            // Czytelny błąd: nieznany użytkownik, wysyłka do siebie itp.
+            model.addAttribute("errorMsg", e.getMessage());
         } catch (Exception e) {
             log.error("Błąd wysyłania wiadomości", e);
-            model.addAttribute("errorMsg", "Błąd: " + e.getMessage());
+            model.addAttribute("errorMsg", "Błąd serwera: " + e.getMessage());
         }
-        model.addAttribute("users", messageService.getAllUsers());
-        model.addAttribute("currentUser", user.getUsername());
         return "send";
     }
-
-    // ----------------------------------------------------------------
-    // SKRZYNKA ODBIORCZA — GET
-    // ----------------------------------------------------------------
 
     @GetMapping("/inbox")
     public String inboxPage(@AuthenticationPrincipal UserDetails user, Model model) {
         model.addAttribute("messages", messageService.getInbox(user.getUsername()));
         return "inbox";
     }
-
-    // ----------------------------------------------------------------
-    // ODSZYFRUJ WIADOMOŚĆ — POST (Ajax-free, zwykły formularz)
-    // ----------------------------------------------------------------
 
     @PostMapping("/decrypt/{id}")
     public String decrypt(@PathVariable("id") Long id,
@@ -79,7 +62,7 @@ public class MessageController {
             model.addAttribute("decryptedText", plainText);
         } catch (Exception e) {
             model.addAttribute("decryptErrorId", id);
-            model.addAttribute("decryptError", "Złe hasło lub błąd odszyfrowania.");
+            model.addAttribute("decryptError", "Złe hasło / klucz lub błąd odszyfrowania.");
         }
         model.addAttribute("messages", messageService.getInbox(user.getUsername()));
         return "inbox";
