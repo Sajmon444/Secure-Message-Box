@@ -9,6 +9,7 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.AppUser
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.MessageCategoryRepository;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.SecretMessageRepository;
 
+import java.security.PrivateKey;
 import java.util.List;
 
 @Service
@@ -32,17 +33,23 @@ public class MessageService {
         this.e2eeService = e2eeService;
     }
 
+    // =========================================================
+    // WYSYŁANIE
+    // =========================================================
+
     /**
-     * Wysyła wiadomość. Odbiorcę podajemy jako nazwę użytkownika (pole tekstowe).
-     * Rzuca IllegalArgumentException jeśli odbiorca nie istnieje.
+     * STANDARD: szyfrowanie AES, messagePassword = hasło wiadomości.
      *
-     * Kategoria STANDARD    → AES-256-CBC (hasło symetryczne podane przez nadawcę)
-     * Kategoria END_TO_END_ENCRYPTED → RSA-2048 (szyfrowanie kluczem publicznym odbiorcy)
+     * END_TO_END_ENCRYPTED:
+     *   - treść szyfrowana kluczem publicznym RSA odbiorcy
+     *   - wiadomość podpisywana kluczem prywatnym Ed25519 nadawcy
+     *   - e2eePassword = hasło E2EE nadawcy (odszyfrowuje jego klucz Ed25519 z bazy)
+     *   - to hasło jest INNE niż hasło logowania
      */
     @Transactional
     public void sendMessage(String senderUsername, String receiverUsername,
                             String categoryName, String plainText,
-                            String messagePassword) throws Exception {
+                            String messagePassword, String e2eePassword) throws Exception {
 
         if (senderUsername.equalsIgnoreCase(receiverUsername)) {
             throw new IllegalArgumentException("Nie możesz wysłać wiadomości do siebie.");
@@ -51,7 +58,6 @@ public class MessageService {
         AppUser sender = userRepository.findByUsername(senderUsername)
                 .orElseThrow(() -> new RuntimeException("Brak nadawcy"));
 
-        // Szukamy odbiorcy po nazwie — jeśli nie istnieje, rzucamy czytelny wyjątek
         AppUser receiver = userRepository.findByUsername(receiverUsername)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Użytkownik \"" + receiverUsername + "\" nie istnieje."));
@@ -61,18 +67,38 @@ public class MessageService {
 
         String encryptedContent;
         String iv;
+        String digitalSignature = null;
 
         if ("END_TO_END_ENCRYPTED".equals(categoryName)) {
-            // E2EE: szyfrujemy kluczem PUBLICZNYM odbiorcy
-            // Serwer nie ma klucza prywatnego — nie może odszyfrować
+
             if (receiver.getPublicKey() == null) {
                 throw new IllegalArgumentException(
-                        "Odbiorca nie posiada klucza publicznego (stare konto). Nie można wysłać wiadomości E2EE.");
+                        "Odbiorca nie posiada kluczy E2EE. Nie można wysłać wiadomości Poufnej.");
             }
-            encryptedContent = e2eeService.encrypt(plainText, receiver.getPublicKey());
-            iv = "E2EE_NO_IV"; // RSA nie używa IV — wstawiamy placeholder
+
+            // A. Szyfruj RSA kluczem publicznym ODBIORCY
+            encryptedContent = e2eeService.rsaEncrypt(plainText, receiver.getPublicKey());
+            iv = "E2EE_NO_IV";
+
+            // B. Podpisz Ed25519 kluczem prywatnym NADAWCY
+            // Używamy dedykowanej metody dla Ed25519 — NIE RSA!
+            if (e2eePassword != null && !e2eePassword.isBlank()
+                    && sender.getEncryptedSigningPrivateKey() != null) {
+                try {
+                    PrivateKey signingKey = e2eeService.decryptEd25519PrivateKey(
+                            sender.getEncryptedSigningPrivateKey(),
+                            e2eePassword,
+                            sender.getKdfSalt()
+                    );
+                    digitalSignature = e2eeService.sign(encryptedContent, signingKey);
+                } catch (Exception ex) {
+                    throw new IllegalArgumentException(
+                            "Złe hasło E2EE — nie można odszyfrować klucza podpisu. " +
+                                    "Podaj hasło E2EE ustawione podczas rejestracji.");
+                }
+            }
+
         } else {
-            // STANDARD: szyfrujemy AES kluczem symetrycznym (hasło nadawcy)
             iv = encryptionService.generateIv();
             encryptedContent = encryptionService.encryptWithIv(plainText, messagePassword, iv);
         }
@@ -83,11 +109,15 @@ public class MessageService {
         msg.setCategory(category);
         msg.setEncryptedContent(encryptedContent);
         msg.setSecretIv(iv);
+        msg.setDigitalSignature(digitalSignature);
 
         messageRepository.saveAndFlush(msg);
     }
 
-    /** Skrzynka odbiorcza — JOIN FETCH zapobiega LazyInitializationException. */
+    // =========================================================
+    // SKRZYNKA ODBIORCZA
+    // =========================================================
+
     @Transactional(readOnly = true)
     public List<SecretMessage> getInbox(String username) {
         AppUser user = userRepository.findByUsername(username)
@@ -95,24 +125,68 @@ public class MessageService {
         return messageRepository.findInboxWithDetails(user.getId());
     }
 
+    // =========================================================
+    // DESZYFROWANIE
+    // =========================================================
+
     /**
-     * Deszyfrowanie wiadomości.
-     * STANDARD          → messagePassword = hasło AES nadawcy
-     * END_TO_END_ENCRYPTED → messagePassword = klucz prywatny RSA odbiorcy (Base64)
+     * STANDARD: messagePassword = hasło AES nadawcy.
+     *
+     * END_TO_END_ENCRYPTED: messagePassword = hasło E2EE ODBIORCY.
+     *   Serwer pobiera zaszyfrowany klucz prywatny RSA odbiorcy z bazy,
+     *   odszyfrowuje go przez PBKDF2+AES, deszyfruje wiadomość.
+     *   Weryfikuje podpis Ed25519 nadawcy — wykrywa tampering.
      */
     @Transactional(readOnly = true)
-    public String decryptMessage(Long messageId, String messagePassword) throws Exception {
+    public DecryptResult decryptMessage(Long messageId, String messagePassword) throws Exception {
         SecretMessage msg = messageRepository.findById(messageId)
                 .orElseThrow(() -> new RuntimeException("Brak wiadomości"));
 
         String categoryName = msg.getCategory().getCategoryName();
 
         if ("END_TO_END_ENCRYPTED".equals(categoryName)) {
-            // messagePassword to tutaj klucz prywatny RSA odbiorcy
-            return e2eeService.decrypt(msg.getEncryptedContent(), messagePassword);
+            AppUser receiver = msg.getReceiver();
+
+            // Odszyfruj klucz prywatny RSA hasłem E2EE ODBIORCY
+            // Używamy dedykowanej metody dla RSA — NIE Ed25519!
+            PrivateKey rsaPrivateKey;
+            try {
+                rsaPrivateKey = e2eeService.decryptRsaPrivateKey(
+                        receiver.getEncryptedPrivateKey(),
+                        messagePassword,
+                        receiver.getKdfSalt()
+                );
+            } catch (Exception ex) {
+                throw new IllegalArgumentException(
+                        "Złe hasło E2EE — nie można odszyfrować klucza prywatnego.");
+            }
+
+            // Weryfikuj podpis Ed25519
+            boolean signaturePresent = msg.getDigitalSignature() != null
+                    && !msg.getDigitalSignature().isBlank();
+            boolean signatureValid   = false;
+
+            if (signaturePresent && msg.getSender().getSigningPublicKey() != null) {
+                signatureValid = e2eeService.verify(
+                        msg.getEncryptedContent(),
+                        msg.getDigitalSignature(),
+                        msg.getSender().getSigningPublicKey()
+                );
+                if (!signatureValid) {
+                    throw new SecurityException(
+                            "WERYFIKACJA PODPISU NIEUDANA — wiadomość mogła zostać zmodyfikowana!");
+                }
+            }
+
+            String plainText = e2eeService.rsaDecrypt(msg.getEncryptedContent(), rsaPrivateKey);
+            return new DecryptResult(plainText, signaturePresent, signatureValid);
+
         } else {
-            // STANDARD — AES z IV
-            return encryptionService.decrypt(msg.getEncryptedContent(), messagePassword, msg.getSecretIv());
+            String plainText = encryptionService.decrypt(
+                    msg.getEncryptedContent(), messagePassword, msg.getSecretIv());
+            return new DecryptResult(plainText, false, false);
         }
     }
+
+    public record DecryptResult(String plainText, boolean signaturePresent, boolean signatureValid) {}
 }

@@ -5,7 +5,7 @@
     <title>Wyślij wiadomość</title>
     <style>
         body { font-family: Arial, sans-serif; background:#f0f2f5; margin:0; padding:20px; }
-        .container { max-width:520px; margin:40px auto; background:white;
+        .container { max-width:540px; margin:40px auto; background:white;
             padding:32px; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.1); }
         h2 { margin-top:0; color:#333; }
         label { display:block; margin:12px 0 4px; font-size:14px; color:#555; }
@@ -13,16 +13,18 @@
             width:100%; padding:9px; border:1px solid #ccc; border-radius:4px;
             box-sizing:border-box; font-size:14px; }
         textarea { resize:vertical; height:100px; }
-        button { margin-top:16px; width:100%; padding:10px; background:#4a6fa5;
+        button[type="submit"] { margin-top:16px; width:100%; padding:10px; background:#4a6fa5;
             color:white; border:none; border-radius:4px; font-size:15px; cursor:pointer; }
-        button:hover { background:#3a5a8a; }
-        .msg-ok  { background:#eafaf1; color:#1e8449; padding:10px; border-radius:4px; margin-bottom:12px; font-size:14px; }
-        .msg-err { background:#fdecea; color:#c0392b; padding:10px; border-radius:4px; margin-bottom:12px; font-size:14px; }
-        .nav-link { display:inline-block; margin-top:14px; font-size:13px; color:#4a6fa5; text-decoration:none; }
+        button[type="submit"]:hover { background:#3a5a8a; }
+        .msg-ok  { background:#eafaf1; color:#1e8449; padding:10px; border-radius:4px; margin-bottom:12px; }
+        .msg-err { background:#fdecea; color:#c0392b; padding:10px; border-radius:4px; margin-bottom:12px; }
+        .e2ee-box { display:none; background:#f0f7ff; border:1px solid #b3d4f5;
+            border-radius:6px; padding:14px; margin-top:8px; }
+        .e2ee-box.show { display:block; }
+        .hint { font-size:11px; color:#888; margin-top:3px; }
+        .nav-link { display:inline-block; margin-top:14px; font-size:13px;
+            color:#4a6fa5; text-decoration:none; }
         .nav-link:hover { text-decoration:underline; }
-        .info-e2ee { background:#eaf4ff; border-left:4px solid #4a6fa5;
-            padding:10px; border-radius:4px; font-size:12px;
-            margin-top:8px; display:none; }
     </style>
 </head>
 <body>
@@ -36,49 +38,61 @@
 
         <label for="receiverUsername">Odbiorca (nazwa użytkownika)</label>
         <input type="text" id="receiverUsername" name="receiverUsername"
-               placeholder="Wpisz nazwę użytkownika odbiorcy" required autofocus/>
+               placeholder="Wpisz dokładną nazwę użytkownika" required autofocus/>
 
         <label for="category">Kategoria</label>
-        <select id="category" name="category" required onchange="handleCategoryChange(this.value)">
-            <option value="STANDARD">Zwykła (AES — hasło symetryczne)</option>
-            <option value="END_TO_END_ENCRYPTED">Poufna E2EE (RSA — klucz publiczny odbiorcy)</option>
+        <select id="category" name="category" required onchange="onCategoryChange(this.value)">
+            <option value="STANDARD">Zwykła (AES-256)</option>
+            <option value="END_TO_END_ENCRYPTED">Poufna E2EE (RSA + Ed25519 + PBKDF2)</option>
         </select>
-
-        <div class="info-e2ee" id="e2eeInfo">
-            🔐 <strong>Poufna E2EE:</strong> Wiadomość zostanie zaszyfrowana kluczem publicznym odbiorcy.
-            Do odszyfrowania odbiorca będzie musiał podać swój klucz prywatny RSA (otrzymany przy rejestracji).
-            W polu hasła poniżej wpisz cokolwiek — nie jest używane dla E2EE.
-        </div>
 
         <label for="content">Treść wiadomości</label>
         <textarea id="content" name="content" placeholder="Wpisz treść..." required></textarea>
 
-        <label id="passwordLabel" for="msgPassword">Hasło wiadomości (do szyfrowania AES)</label>
-        <input type="password" id="msgPassword" name="msgPassword"
-               placeholder="Ustaw hasło do tej wiadomości" required/>
+        <!-- STANDARD: hasło AES -->
+        <div id="stdBox">
+            <label for="msgPassword">Hasło wiadomości (AES)</label>
+            <input type="password" id="msgPassword" name="msgPassword"
+                   placeholder="Odbiorca będzie musiał znać to hasło"/>
+            <div class="hint">Podaj odbiorcy to hasło kanałem poza aplikacją (np. SMS).</div>
+        </div>
 
-        <button type="submit">Wyślij</button>
+        <!-- E2EE: hasło E2EE nadawcy -->
+        <div id="e2eeBox" class="e2ee-box">
+            <p style="margin:0 0 10px; font-size:13px; color:#1565c0;">
+                🔒 <strong>Poufna E2EE:</strong> Treść szyfrowana kluczem publicznym RSA odbiorcy.
+                Podpis Ed25519 dołączany automatycznie z Twoich kluczy w bazie.
+            </p>
+            <label for="e2eePassword">Twoje hasło E2EE</label>
+            <input type="password" id="e2eePassword" name="e2eePassword"
+                   placeholder="Hasło E2EE ustawione przy rejestracji"/>
+            <div class="hint">
+                To hasło odszyfrowuje Twój klucz Ed25519 (podpis cyfrowy).
+                Jest <strong>inne</strong> niż hasło logowania.
+            </div>
+        </div>
+
+        <button type="submit">Wyślij wiadomość</button>
     </form>
 
-    <a th:href="@{/messages/inbox}" class="nav-link">📥 Skrzynka odbiorcza</a>
+    <a th:href="@{/messages/inbox}" class="nav-link">📥 Skrzynka</a>
     &nbsp;|&nbsp;
     <a th:href="@{/dashboard}" class="nav-link">← Dashboard</a>
 </div>
 
 <script>
-    function handleCategoryChange(value) {
-        const info    = document.getElementById('e2eeInfo');
-        const label   = document.getElementById('passwordLabel');
-        const pwdInput = document.getElementById('msgPassword');
-
-        if (value === 'END_TO_END_ENCRYPTED') {
-            info.style.display = 'block';
-            label.textContent  = 'Pole nieużywane dla E2EE (wpisz cokolwiek)';
-            pwdInput.placeholder = 'Nieużywane dla E2EE — wpisz cokolwiek';
+    function onCategoryChange(val) {
+        const stdBox  = document.getElementById('stdBox');
+        const e2eeBox = document.getElementById('e2eeBox');
+        const stdPwd  = document.getElementById('msgPassword');
+        if (val === 'END_TO_END_ENCRYPTED') {
+            stdBox.style.display = 'none';
+            stdPwd.removeAttribute('required');
+            e2eeBox.classList.add('show');
         } else {
-            info.style.display = 'none';
-            label.textContent  = 'Hasło wiadomości (do szyfrowania AES)';
-            pwdInput.placeholder = 'Ustaw hasło do tej wiadomości';
+            stdBox.style.display = '';
+            stdPwd.setAttribute('required', '');
+            e2eeBox.classList.remove('show');
         }
     }
 </script>

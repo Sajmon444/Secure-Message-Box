@@ -24,10 +24,26 @@ public class AppUser {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
-    // Klucz publiczny RSA (Base64) — wysyłany na serwer podczas rejestracji.
-    // Klucz prywatny NIGDY nie trafia na serwer — użytkownik musi go zapisać lokalnie.
+    // Klucz publiczny RSA — każdy może pobrać, by zaszyfrować wiadomość
     @Column(name = "public_key", columnDefinition = "TEXT")
     private String publicKey;
+
+    // Klucz prywatny RSA zaszyfrowany PBKDF2+AES (hasłem E2EE użytkownika)
+    @Column(name = "encrypted_private_key", columnDefinition = "TEXT")
+    private String encryptedPrivateKey;
+
+    // Klucz prywatny Ed25519 zaszyfrowany PBKDF2+AES (tym samym hasłem E2EE)
+    // Przechowywany w bazie — nigdy nie ujawniany w formie jawnej
+    @Column(name = "encrypted_signing_priv_key", columnDefinition = "TEXT")
+    private String encryptedSigningPrivateKey;
+
+    // Klucz publiczny Ed25519 — do weryfikacji podpisów wiadomości tego użytkownika
+    @Column(name = "signing_public_key", columnDefinition = "TEXT")
+    private String signingPublicKey;
+
+    // Sól PBKDF2 — potrzebna do wyprowadzenia klucza AES z hasła E2EE
+    @Column(name = "kdf_salt", length = 64)
+    private String kdfSalt;
 
     @OneToMany(mappedBy = "sender", fetch = FetchType.LAZY)
     private List<SecretMessage> sentMessages;

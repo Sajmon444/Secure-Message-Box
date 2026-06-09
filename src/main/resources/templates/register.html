@@ -2,99 +2,62 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Rejestracja – Secure Message Box</title>
+    <title>Rejestracja</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f0f2f5;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .box {
-            background: white;
-            padding: 40px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            width: 320px;
-        }
-        h2 {
-            margin-top: 0;
-            margin-bottom: 24px;
-            text-align: center;
-            color: #333;
-        }
-        label {
-            display: block;
-            margin-bottom: 4px;
-            font-size: 14px;
-            color: #555;
-        }
-        input[type="text"],
-        input[type="password"] {
-            width: 100%;
-            padding: 10px;
-            margin-bottom: 16px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 14px;
-        }
-        button {
-            width: 100%;
-            padding: 10px;
-            background: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 15px;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #1e8449;
-        }
-        .msg-error {
-            background: #fdecea;
-            color: #c0392b;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 16px;
-            font-size: 13px;
-        }
-        .link-row {
-            text-align: center;
-            margin-top: 16px;
-            font-size: 13px;
-        }
-        .link-row a {
-            color: #4a6fa5;
-            text-decoration: none;
-        }
-        .link-row a:hover {
-            text-decoration: underline;
-        }
+        body { font-family: Arial, sans-serif; background:#f0f2f5; display:flex;
+            justify-content:center; align-items:center; min-height:100vh; margin:0; padding:20px; }
+        .box { background:white; padding:40px; border-radius:8px;
+            box-shadow:0 2px 10px rgba(0,0,0,0.1); width:360px; }
+        h2 { margin-top:0; margin-bottom:20px; text-align:center; color:#333; }
+        label { display:block; margin-bottom:4px; font-size:14px; color:#555; }
+        input[type="text"], input[type="password"] {
+            width:100%; padding:10px; margin-bottom:14px; border:1px solid #ccc;
+            border-radius:4px; box-sizing:border-box; font-size:14px; }
+        button { width:100%; padding:10px; background:#27ae60; color:white; border:none;
+            border-radius:4px; font-size:15px; cursor:pointer; }
+        button:hover { background:#1e8449; }
+        .msg-err { background:#fdecea; color:#c0392b; padding:10px; border-radius:4px;
+            margin-bottom:14px; font-size:13px; }
+        .info { background:#eaf4ff; border-left:4px solid #4a6fa5; padding:10px;
+            border-radius:4px; font-size:12px; margin-bottom:14px; }
+        .nav-link { text-align:center; margin-top:14px; font-size:13px; }
+        .nav-link a { color:#4a6fa5; text-decoration:none; }
+        .nav-link a:hover { text-decoration:underline; }
+        hr { border:none; border-top:1px solid #eee; margin:16px 0; }
     </style>
 </head>
 <body>
 <div class="box">
     <h2>📝 Rejestracja</h2>
 
-    <!-- Komunikat błędu (np. nazwa zajęta) -->
-    <div th:if="${errorMsg}" class="msg-error" th:text="${errorMsg}"></div>
+    <div th:if="${errorMsg}" class="msg-err" th:text="${errorMsg}"></div>
 
     <form th:action="@{/register}" method="post">
-        <label for="username">Nazwa użytkownika</label>
-        <input type="text" id="username" name="username" placeholder="Wpisz nazwę użytkownika" required autofocus/>
 
-        <label for="password">Hasło</label>
-        <input type="password" id="password" name="password" placeholder="Wpisz hasło" required/>
+        <label for="username">Nazwa użytkownika</label>
+        <input type="text" id="username" name="username"
+               placeholder="Wpisz nazwę użytkownika" required autofocus/>
+
+        <label for="password">Hasło logowania</label>
+        <input type="password" id="password" name="password"
+               placeholder="Hasło do logowania w aplikacji" required/>
+
+        <hr/>
+
+        <div class="info">
+            <strong>🔐 Hasło E2EE</strong> — służy do ochrony Twoich kluczy kryptograficznych.
+            Musi być <strong>inne</strong> niż hasło logowania.
+            Będziesz go potrzebować przy wysyłaniu i odczytywaniu wiadomości Poufnych.
+        </div>
+
+        <label for="e2eePassword">Hasło E2EE (do szyfrowania kluczy prywatnych)</label>
+        <input type="password" id="e2eePassword" name="e2eePassword"
+               placeholder="Inne niż hasło logowania!" required/>
 
         <button type="submit">Zarejestruj się</button>
     </form>
 
-    <div class="link-row">
+    <div class="nav-link">
         Masz już konto? <a th:href="@{/login}">Zaloguj się</a>
     </div>
 </div>

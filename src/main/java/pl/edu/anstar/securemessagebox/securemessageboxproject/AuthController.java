@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class AuthController {
 
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
-
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -38,19 +37,19 @@ public class AuthController {
 
     @PostMapping("/register")
     public String registerSubmit(
-            @RequestParam("username") String username,
-            @RequestParam("password") String password,
+            @RequestParam("username")     String username,
+            @RequestParam("password")     String password,
+            @RequestParam("e2eePassword") String e2eePassword,
             Model model) {
         try {
-            String privateKey = authService.register(username, password);
-            if (privateKey == null) {
+            String kdfSalt = authService.register(username, password, e2eePassword);
+            if (kdfSalt == null) {
                 model.addAttribute("errorMsg", "Nazwa użytkownika jest już zajęta.");
                 return "register";
             }
-            // Pokazujemy klucz prywatny TYLKO RAZ — użytkownik musi go zapisać!
-            model.addAttribute("privateKey", privateKey);
-            model.addAttribute("username", username);
-            return "private-key"; // osobna strona z instrukcją zapisania klucza
+            model.addAttribute("username",   username);
+            model.addAttribute("kdfSalt",    kdfSalt);
+            return "private-key";
         } catch (Exception e) {
             log.error("Błąd rejestracji", e);
             model.addAttribute("errorMsg", "Błąd serwera: " + e.getMessage());

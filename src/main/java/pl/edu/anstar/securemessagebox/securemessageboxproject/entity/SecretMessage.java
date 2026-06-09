@@ -34,10 +34,15 @@ public class SecretMessage {
     @Column(name = "encrypted_content", nullable = false, columnDefinition = "TEXT")
     private String encryptedContent;
 
-    // Wektor inicjalizacyjny AES — niezbędny do odszyfrowania wiadomości.
-    // Przechowywany jako Base64 w kolumnie secret_iv.
+    // Wektor inicjalizacyjny AES (dla STANDARD) lub "E2EE_NO_IV" (dla E2EE)
     @Column(name = "secret_iv", nullable = false, length = 64)
     private String secretIv;
+
+    // Podpis cyfrowy Ed25519 wiadomości (Base64) — tylko dla kategorii END_TO_END_ENCRYPTED.
+    // Pozwala odbiorcy zweryfikować, że wiadomość pochodzi od deklarowanego nadawcy
+    // i nie została zmodyfikowana w bazie danych (ochrona przed tampering).
+    @Column(name = "digital_signature", columnDefinition = "TEXT")
+    private String digitalSignature;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
