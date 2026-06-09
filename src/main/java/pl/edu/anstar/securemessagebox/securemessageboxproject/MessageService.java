@@ -1,3 +1,5 @@
+// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/MessageService.java
+
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.springframework.stereotype.Service;
@@ -39,12 +41,12 @@ public class MessageService {
 
     /**
      * STANDARD: szyfrowanie AES, messagePassword = hasło wiadomości.
+     *   Dla każdej wiadomości generowane są nowe, losowe IV i SÓŁ.
      *
      * END_TO_END_ENCRYPTED:
      *   - treść szyfrowana kluczem publicznym RSA odbiorcy
      *   - wiadomość podpisywana kluczem prywatnym Ed25519 nadawcy
      *   - e2eePassword = hasło E2EE nadawcy (odszyfrowuje jego klucz Ed25519 z bazy)
-     *   - to hasło jest INNE niż hasło logowania
      */
     @Transactional
     public void sendMessage(String senderUsername, String receiverUsername,
@@ -67,6 +69,7 @@ public class MessageService {
 
         String encryptedContent;
         String iv;
+        String salt;
         String digitalSignature = null;
 
         if ("END_TO_END_ENCRYPTED".equals(categoryName)) {
@@ -78,10 +81,10 @@ public class MessageService {
 
             // A. Szyfruj RSA kluczem publicznym ODBIORCY
             encryptedContent = e2eeService.rsaEncrypt(plainText, receiver.getPublicKey());
-            iv = "E2EE_NO_IV";
+            iv   = "E2EE_NO_IV";
+            salt = "E2EE_NO_SALT"; // RSA nie używa PBKDF2 — sól nie jest potrzebna
 
             // B. Podpisz Ed25519 kluczem prywatnym NADAWCY
-            // Używamy dedykowanej metody dla Ed25519 — NIE RSA!
             if (e2eePassword != null && !e2eePassword.isBlank()
                     && sender.getEncryptedSigningPrivateKey() != null) {
                 try {
@@ -99,8 +102,10 @@ public class MessageService {
             }
 
         } else {
-            iv = encryptionService.generateIv();
-            encryptedContent = encryptionService.encryptWithIv(plainText, messagePassword, iv);
+            // STANDARD: generujemy unikalne IV i SÓŁ dla każdej wiadomości
+            iv   = encryptionService.generateIv();
+            salt = encryptionService.generateSalt();
+            encryptedContent = encryptionService.encryptWithIv(plainText, messagePassword, iv, salt);
         }
 
         SecretMessage msg = new SecretMessage();
@@ -109,6 +114,7 @@ public class MessageService {
         msg.setCategory(category);
         msg.setEncryptedContent(encryptedContent);
         msg.setSecretIv(iv);
+        msg.setSecretSalt(salt);       // ← zapisujemy losową sól w bazie
         msg.setDigitalSignature(digitalSignature);
 
         messageRepository.saveAndFlush(msg);
@@ -131,11 +137,9 @@ public class MessageService {
 
     /**
      * STANDARD: messagePassword = hasło AES nadawcy.
+     *   IV i SÓŁ są pobierane z bazy (kolumny secret_iv i secret_salt).
      *
      * END_TO_END_ENCRYPTED: messagePassword = hasło E2EE ODBIORCY.
-     *   Serwer pobiera zaszyfrowany klucz prywatny RSA odbiorcy z bazy,
-     *   odszyfrowuje go przez PBKDF2+AES, deszyfruje wiadomość.
-     *   Weryfikuje podpis Ed25519 nadawcy — wykrywa tampering.
      */
     @Transactional(readOnly = true)
     public DecryptResult decryptMessage(Long messageId, String messagePassword) throws Exception {
@@ -147,8 +151,6 @@ public class MessageService {
         if ("END_TO_END_ENCRYPTED".equals(categoryName)) {
             AppUser receiver = msg.getReceiver();
 
-            // Odszyfruj klucz prywatny RSA hasłem E2EE ODBIORCY
-            // Używamy dedykowanej metody dla RSA — NIE Ed25519!
             PrivateKey rsaPrivateKey;
             try {
                 rsaPrivateKey = e2eeService.decryptRsaPrivateKey(
@@ -161,7 +163,6 @@ public class MessageService {
                         "Złe hasło E2EE — nie można odszyfrować klucza prywatnego.");
             }
 
-            // Weryfikuj podpis Ed25519
             boolean signaturePresent = msg.getDigitalSignature() != null
                     && !msg.getDigitalSignature().isBlank();
             boolean signatureValid   = false;
@@ -182,8 +183,13 @@ public class MessageService {
             return new DecryptResult(plainText, signaturePresent, signatureValid);
 
         } else {
+            // STANDARD: przekazujemy IV i SÓŁ z bazy do deszyfrowania
             String plainText = encryptionService.decrypt(
-                    msg.getEncryptedContent(), messagePassword, msg.getSecretIv());
+                    msg.getEncryptedContent(),
+                    messagePassword,
+                    msg.getSecretIv(),
+                    msg.getSecretSalt()   // ← sól pobrana z bazy
+            );
             return new DecryptResult(plainText, false, false);
         }
     }

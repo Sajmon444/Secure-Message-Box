@@ -1,3 +1,5 @@
+// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/entity/SecretMessage.java
+
 package pl.edu.anstar.securemessagebox.securemessageboxproject.entity;
 
 import jakarta.persistence.*;
@@ -38,9 +40,16 @@ public class SecretMessage {
     @Column(name = "secret_iv", nullable = false, length = 64)
     private String secretIv;
 
+    /**
+     * Losowa sól PBKDF2 dla wiadomości STANDARD (Base64, 16 bajtów).
+     * Wartość 'E2EE_NO_SALT' dla wiadomości END_TO_END_ENCRYPTED (RSA nie używa PBKDF2).
+     * Przechowywanie jawne jest BEZPIECZNE — tajność soli nie jest wymagana,
+     * siłę zapewniają iteracje PBKDF2 + unikalność soli per wiadomość.
+     */
+    @Column(name = "secret_salt", nullable = false, length = 64)
+    private String secretSalt;
+
     // Podpis cyfrowy Ed25519 wiadomości (Base64) — tylko dla kategorii END_TO_END_ENCRYPTED.
-    // Pozwala odbiorcy zweryfikować, że wiadomość pochodzi od deklarowanego nadawcy
-    // i nie została zmodyfikowana w bazie danych (ochrona przed tampering).
     @Column(name = "digital_signature", columnDefinition = "TEXT")
     private String digitalSignature;
 

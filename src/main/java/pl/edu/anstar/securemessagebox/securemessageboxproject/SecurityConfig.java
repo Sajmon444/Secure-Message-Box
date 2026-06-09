@@ -1,3 +1,5 @@
+// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/SecurityConfig.java
+
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.springframework.context.annotation.Bean;
@@ -26,8 +28,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // Konstruktor wymaga UserDetailsService jako jedynego argumentu.
-    // PasswordEncoder ustawiamy osobno przez setter.
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(appUserDetailsService);
@@ -44,7 +44,8 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authenticationProvider(authenticationProvider())
-                .csrf(csrf -> csrf.disable())
+                // CSRF włączony — Thymeleaf (th:action) automatycznie dodaje token do formularzy.
+                // Linia csrf.disable() została usunięta — to była poważna luka bezpieczeństwa.
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/register", "/").permitAll()
                         .requestMatchers("/dashboard").authenticated()

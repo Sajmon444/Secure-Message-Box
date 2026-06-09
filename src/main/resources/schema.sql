@@ -82,8 +82,8 @@ CREATE TABLE IF NOT EXISTS message_category (
 )@@
 
 -- Dwie aktywne kategorie:
---   STANDARD           → szyfrowanie symetryczne AES-256-CBC, hasło znane obu stronom
---   END_TO_END_ENCRYPTED → RSA-2048 + Ed25519 + PBKDF2, serwer nie może odszyfrować
+--   STANDARD            szyfrowanie symetryczne AES-256-CBC, hasło znane obu stronom
+--   END_TO_END_ENCRYPTED  RSA-2048 + Ed25519 + PBKDF2, serwer nie może odszyfrować
 INSERT INTO message_category (category_name)
 VALUES ('STANDARD'), ('END_TO_END_ENCRYPTED')
 ON CONFLICT (category_name) DO NOTHING@@
@@ -100,8 +100,13 @@ CREATE TABLE IF NOT EXISTS secret_message (
     encrypted_content TEXT      NOT NULL,
 
     -- IV dla trybu AES-CBC (jawny — standardowa praktyka kryptograficzna)
-    -- Wartość 'E2EE_NO_IV' gdy kategoria = END_TO_END_ENCRYPTED (RSA nie używa IV)
+    -- Wartość 'E2EE_NO_IV' gdy kategoria = END_TO_END_ENCRYPTED
     secret_iv         VARCHAR(64) NOT NULL DEFAULT 'MIGRATED_NO_IV',
+
+    -- Losowa sól PBKDF2 per wiadomość (jawna — standardowa praktyka)
+    -- Wartość 'E2EE_NO_SALT' gdy kategoria = END_TO_END_ENCRYPTED
+    -- Wartość 'MIGRATED_NO_SALT' dla wiadomości sprzed migracji
+    secret_salt       VARCHAR(64) NOT NULL DEFAULT 'MIGRATED_NO_SALT',
 
     -- Podpis cyfrowy Ed25519 zaszyfrowanej treści (jawny — służy weryfikacji)
     -- NULL dla wiadomości STANDARD
@@ -116,19 +121,6 @@ CREATE TABLE IF NOT EXISTS secret_message (
         FOREIGN KEY (receiver_id) REFERENCES app_user(id)        ON DELETE CASCADE,
     CONSTRAINT fk_message_category
         FOREIGN KEY (category_id) REFERENCES message_category(id)
-)@@
-
-
--- Alerty bezpieczeństwa (do przyszłej rozbudowy modułu moderacji)
-CREATE TABLE IF NOT EXISTS security_alert (
-    id             BIGINT      NOT NULL DEFAULT nextval('alert_seq'),
-    user_id        BIGINT      NOT NULL,
-    description    TEXT        NOT NULL,
-    severity_level VARCHAR(10) NOT NULL CHECK (severity_level IN ('LOW', 'MEDIUM', 'HIGH')),
-    timestamp      TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    CONSTRAINT fk_alert_user
-        FOREIGN KEY (user_id) REFERENCES app_user(id) ON DELETE CASCADE
 )@@
 
 

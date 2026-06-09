@@ -11,8 +11,17 @@
         h1 { color:#27ae60; margin-bottom:8px; }
         p  { color:#555; font-size:16px; }
         .nav { display:flex; gap:12px; justify-content:center; margin-top:24px; }
-        .btn { padding:10px 28px; border-radius:4px; text-decoration:none;
-            font-size:15px; color:white; }
+
+        .btn {
+            padding:10px 28px;
+            border-radius:4px;
+            text-decoration:none;
+            font-size:15px;
+            color:white;
+            border:none;
+            cursor:pointer;
+        }
+
         .btn-blue  { background:#4a6fa5; }
         .btn-green { background:#27ae60; }
         .btn-red   { background:#e74c3c; }
@@ -21,12 +30,22 @@
 </head>
 <body>
 <div class="box">
-    <h1>✅ Witaj!</h1>
+    <h1>Witaj!</h1>
     <p>Zalogowany jako: <strong th:text="${username}">użytkownik</strong></p>
     <div class="nav">
-        <a th:href="@{/messages/send}"  class="btn btn-blue">✉ Wyślij wiadomość</a>
-        <a th:href="@{/messages/inbox}" class="btn btn-green">📥 Skrzynka odbiorcza</a>
-        <a th:href="@{/logout}"         class="btn btn-red">Wyloguj</a>
+        <a th:href="@{/messages/send}" class="btn btn-blue">
+            Wyślij wiadomość
+        </a>
+
+        <a th:href="@{/messages/inbox}" class="btn btn-green">
+            Skrzynka odbiorcza
+        </a>
+
+        <form th:action="@{/logout}" method="post" class="logout-form">
+            <button type="submit" class="btn btn-red">
+                Wyloguj
+            </button>
+        </form>
     </div>
 </div>
 </body>

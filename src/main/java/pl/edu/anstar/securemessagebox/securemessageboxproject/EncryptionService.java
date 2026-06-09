@@ -1,3 +1,5 @@
+// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/EncryptionService.java
+
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.springframework.stereotype.Service;
@@ -14,47 +16,62 @@ import java.util.Base64;
 /**
  * Szyfrowanie i deszyfrowanie wiadomości algorytmem AES-256-CBC.
  *
- * Hasło użytkownika → klucz AES (PBKDF2WithHmacSHA256) → szyfrowanie wiadomości.
- * Losowe IV (16 bajtów) jest zapisywane w bazie razem z wiadomością (kolumna secret_iv).
- * Bez tego samego IV i hasła odszyfrowanie jest niemożliwe.
+ * Hasło użytkownika + LOSOWA SÓŁ → klucz AES (PBKDF2WithHmacSHA256) → szyfrowanie wiadomości.
+ *
+ * Dla każdej wiadomości STANDARD generowane są:
+ *   - losowe IV  (16 bajtów) → zapisywane w kolumnie secret_iv
+ *   - losowa SÓŁ (16 bajtów) → zapisywane w kolumnie secret_salt
+ *
+ * Bez znajomości hasła, IV i soli odszyfrowanie jest niemożliwe.
+ * Dzięki unikalnej soli per wiadomość nie można stosować tęczowych tablic
+ * ani atakować wielu wiadomości jednocześnie tym samym słownikiem.
  */
 @Service
 public class EncryptionService {
 
-    private static final String ALGORITHM     = "AES/CBC/PKCS5Padding";
-    private static final String KEY_FACTORY   = "PBKDF2WithHmacSHA256";
-    private static final byte[] SALT          = "SecureMsgBoxSalt".getBytes(); // stały salt — wystarczy na zaliczenie
-    private static final int    ITERATIONS    = 65536;
-    private static final int    KEY_LENGTH    = 256;
+    private static final String ALGORITHM   = "AES/CBC/PKCS5Padding";
+    private static final String KEY_FACTORY = "PBKDF2WithHmacSHA256";
+    private static final int    ITERATIONS  = 100000;
+    private static final int    KEY_LENGTH  = 256;
 
     // ----------------------------------------------------------------
-    // Szyfrowanie
+    // Generowanie losowych parametrów kryptograficznych
     // ----------------------------------------------------------------
 
-    public String encrypt(String plainText, String password) throws Exception {
-        SecretKey key = deriveKey(password);
-
-        byte[] iv = new byte[16];
-        new SecureRandom().nextBytes(iv);
-        IvParameterSpec ivSpec = new IvParameterSpec(iv);
-
-        Cipher cipher = Cipher.getInstance(ALGORITHM);
-        cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-
-        byte[] encrypted = cipher.doFinal(plainText.getBytes("UTF-8"));
-        return Base64.getEncoder().encodeToString(encrypted);
-    }
-
-    /** Zwraca losowe IV jako Base64 — musi być zapisane w bazie razem z wiadomością. */
+    /**
+     * Generuje losowe IV (16 bajtów) → do zapisania w kolumnie secret_iv.
+     */
     public String generateIv() {
         byte[] iv = new byte[16];
         new SecureRandom().nextBytes(iv);
         return Base64.getEncoder().encodeToString(iv);
     }
 
-    /** Szyfruje tekst używając konkretnego IV (podanego jako Base64). */
-    public String encryptWithIv(String plainText, String password, String ivBase64) throws Exception {
-        SecretKey key = deriveKey(password);
+    /**
+     * Generuje losową sól (16 bajtów) → do zapisania w kolumnie secret_salt.
+     * Musi być wywołana PRZED encryptWithIv() i wynik przekazany do obu metod.
+     */
+    public String generateSalt() {
+        byte[] salt = new byte[16];
+        new SecureRandom().nextBytes(salt);
+        return Base64.getEncoder().encodeToString(salt);
+    }
+
+    // ----------------------------------------------------------------
+    // Szyfrowanie
+    // ----------------------------------------------------------------
+
+    /**
+     * Szyfruje tekst używając podanego IV i podanej soli (oba jako Base64).
+     * Schemat wywołania w MessageService:
+     *   String iv   = encryptionService.generateIv();
+     *   String salt = encryptionService.generateSalt();
+     *   String enc  = encryptionService.encryptWithIv(plainText, password, iv, salt);
+     *   // zapisz enc, iv i salt do bazy
+     */
+    public String encryptWithIv(String plainText, String password,
+                                String ivBase64, String saltBase64) throws Exception {
+        SecretKey key = deriveKey(password, saltBase64);
         byte[] iv = Base64.getDecoder().decode(ivBase64);
         IvParameterSpec ivSpec = new IvParameterSpec(iv);
 
@@ -69,8 +86,12 @@ public class EncryptionService {
     // Deszyfrowanie
     // ----------------------------------------------------------------
 
-    public String decrypt(String encryptedBase64, String password, String ivBase64) throws Exception {
-        SecretKey key = deriveKey(password);
+    /**
+     * Odszyfrowuje wiadomość używając IV i soli pobranych z bazy.
+     */
+    public String decrypt(String encryptedBase64, String password,
+                          String ivBase64, String saltBase64) throws Exception {
+        SecretKey key = deriveKey(password, saltBase64);
         byte[] iv = Base64.getDecoder().decode(ivBase64);
         IvParameterSpec ivSpec = new IvParameterSpec(iv);
 
@@ -82,12 +103,13 @@ public class EncryptionService {
     }
 
     // ----------------------------------------------------------------
-    // Prywatne — generowanie klucza AES z hasła
+    // Prywatne — generowanie klucza AES z hasła i losowej soli
     // ----------------------------------------------------------------
 
-    private SecretKey deriveKey(String password) throws Exception {
+    private SecretKey deriveKey(String password, String saltBase64) throws Exception {
+        byte[] salt = Base64.getDecoder().decode(saltBase64);
         PBEKeySpec spec = new PBEKeySpec(
-                password.toCharArray(), SALT, ITERATIONS, KEY_LENGTH
+                password.toCharArray(), salt, ITERATIONS, KEY_LENGTH
         );
         SecretKeyFactory factory = SecretKeyFactory.getInstance(KEY_FACTORY);
         byte[] keyBytes = factory.generateSecret(spec).getEncoded();
