@@ -48,8 +48,7 @@ public class SecurityConfig {
                 // Linia csrf.disable() została usunięta — to była poważna luka bezpieczeństwa.
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/register", "/").permitAll()
-                        .requestMatchers("/dashboard").authenticated()
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated() // Wszystko inne wymaga zalogowania
                 )
                 .formLogin(form -> form
                         .loginPage("/login")
