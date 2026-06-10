@@ -1,0 +1,12 @@
+package rules;
+
+// Zaktualizowany import wskazujący na nowy podpakiet model
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.DroolsTestFact;
+
+rule "Weryfikacja dzialania silnika Drools w nowym pakiecie"
+    when
+        $fact : DroolsTestFact(status == "URUCHOM")
+    then
+        System.out.println(">>> [Drools] Reguła odpaliła się pomyślnie z nowego pakietu strukturalnego! <<<");
+        $fact.setDroolsIsWorking(true);
+end
