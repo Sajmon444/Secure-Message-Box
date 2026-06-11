@@ -2,6 +2,7 @@ package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.kie.api.runtime.KieContainer;
 import org.kie.api.runtime.KieSession;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.DroolsTestFact; // Nowy import
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -9,6 +10,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
+@EnableScheduling
 public class SecureMessageBoxProjectApplication {
 
     public static void main(String[] args) {

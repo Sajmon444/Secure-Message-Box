@@ -1,0 +1,67 @@
+package rules;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.AlertEscalationRequest;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.LoginAttempt;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.MessageScanRequest;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.AlertEscalationRequest;
+// ============================================================
+// SEKCJA 4: ESKALACJA ALERTÓW
+//
+// Reguła 1: 3× LOW + 1× MEDIUM w ciągu 10 min → HIGH + blokada
+// Reguła 2: 5× LOW w ciągu 10 min             → HIGH + blokada
+//
+// Obie reguły tworzą alert ESCALATION_AGGREGATED i blokują konto.
+// ============================================================
+
+rule "Eskalacja - 3x LOW i 1x MEDIUM w 10 minut → HIGH i blokada"
+    salience 60
+    when
+        $esc : AlertEscalationRequest(
+            shouldEscalate == false,
+            lowAlertsLast10Min >= 3,
+            mediumAlertsLast10Min >= 1
+        )
+    then
+        String msg = String.format(
+            "[ESKALACJA] Automatyczna eskalacja alertów dla użytkownika '%s': " +
+            "%d alertów LOW + %d alertów MEDIUM w ciągu 10 minut. " +
+            "Wykryto wzorzec podejrzanego zachowania — konto zablokowane na 24 godziny.",
+            $esc.getUsername(),
+            $esc.getLowAlertsLast10Min(),
+            $esc.getMediumAlertsLast10Min()
+        );
+        $esc.setShouldEscalate(true);
+        $esc.setEscalationDescription(msg);
+        $esc.setBlockReason(String.format(
+            "ESCALATION: %d×LOW + %d×MEDIUM w 10 min — automatyczna eskalacja do HIGH",
+            $esc.getLowAlertsLast10Min(),
+            $esc.getMediumAlertsLast10Min()
+        ));
+        update($esc);
+        System.out.println(">>> [Drools] ESCALATION (LOW+MEDIUM) dla: " + $esc.getUsername());
+end
+
+rule "Eskalacja - 5x LOW w 10 minut → HIGH i blokada"
+    salience 60
+    when
+        $esc : AlertEscalationRequest(
+            shouldEscalate == false,
+            lowAlertsLast10Min >= 5
+        )
+    then
+        String msg = String.format(
+            "[ESKALACJA] Automatyczna eskalacja alertów dla użytkownika '%s': " +
+            "%d alertów LOW w ciągu 10 minut. " +
+            "Wysoka częstotliwość zdarzeń niskiego ryzyka wskazuje na podejrzaną aktywność — " +
+            "konto zablokowane na 24 godziny.",
+            $esc.getUsername(),
+            $esc.getLowAlertsLast10Min()
+        );
+        $esc.setShouldEscalate(true);
+        $esc.setEscalationDescription(msg);
+        $esc.setBlockReason(String.format(
+            "ESCALATION: %d×LOW w 10 min — automatyczna eskalacja do HIGH",
+            $esc.getLowAlertsLast10Min()
+        ));
+        update($esc);
+        System.out.println(">>> [Drools] ESCALATION (5×LOW) dla: " + $esc.getUsername());
+end

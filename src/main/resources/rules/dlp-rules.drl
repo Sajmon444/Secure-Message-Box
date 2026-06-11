@@ -1,0 +1,117 @@
+package rules;
+
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.MessageScanRequest;
+
+// Usunąłem niepotrzebne importy (LoginAttempt, AlertEscalationRequest),
+// ponieważ ten plik odpowiada tylko za skanowanie wiadomości (DLP).
+
+// ============================================================
+// SEKCJA 3: DLP — FILTROWANIE WYCIEKU DANYCH
+// ============================================================
+
+rule "DLP - wykrycie słów kluczowych (pesel, hasło, karta kredytowa, pin)"
+    salience 70
+    when
+        // Używamy natywnego operatora 'matches' zamiast łańcucha metod Javy.
+        // (?i) na początku oznacza "case-insensitive" (nie zważa na wielkość liter).
+        $req : MessageScanRequest(
+            blocked == false,
+            plainTextContent != null,
+            plainTextContent matches "(?i).*(pesel|hasło|haslo|karta kredytowa|pin).*"
+        )
+    then
+        String msg = String.format(
+            "[DLP] Zablokowano wysyłkę wiadomości od '%s' — wykryto wrażliwe słowo kluczowe. " +
+            "Wiadomości zwykłe (AES) nie mogą zawierać: PESEL, hasło, karta kredytowa, PIN. " +
+            "Skorzystaj z kategorii Poufna (E2EE) do przesyłania wrażliwych informacji.",
+            $req.getSenderUsername()
+        );
+        $req.setBlocked(true);
+        $req.setAlertType("DLP_SENSITIVE_KEYWORD");
+        $req.setAlertDescription(msg);
+        $req.setBlockReason(
+            "Wiadomość zawiera wrażliwe słowo kluczowe (pesel/hasło/karta kredytowa/pin). " +
+            "Użyj kategorii Poufna (E2EE) do przesyłania poufnych danych."
+        );
+        update($req);
+        System.out.println(">>> [Drools] DLP_SENSITIVE_KEYWORD dla nadawcy: " + $req.getSenderUsername());
+end
+
+rule "DLP - wykrycie wzorca PESEL (dokładnie 11 cyfr)"
+    salience 70
+    when
+        // Zamiast plainTextContent.matches(...) używamy operatora Drools: matches "..."
+        $req : MessageScanRequest(
+            blocked == false,
+            plainTextContent != null,
+            plainTextContent matches ".*\\b\\d{11}\\b.*"
+        )
+    then
+        String msg = String.format(
+            "[DLP] Zablokowano wysyłkę wiadomości od '%s' — wykryto ciąg 11 cyfr " +
+            "odpowiadający wzorcowi numeru PESEL. " +
+            "Przesyłanie numerów PESEL przez kanał niezaszyfrowany E2EE jest niedozwolone.",
+            $req.getSenderUsername()
+        );
+        $req.setBlocked(true);
+        $req.setAlertType("DLP_PESEL_PATTERN");
+        $req.setAlertDescription(msg);
+        $req.setBlockReason(
+            "Wiadomość zawiera ciąg 11 cyfr (możliwy numer PESEL). " +
+            "Użyj kategorii Poufna (E2EE) lub usuń numer PESEL z treści."
+        );
+        update($req);
+        System.out.println(">>> [Drools] DLP_PESEL_PATTERN dla nadawcy: " + $req.getSenderUsername());
+end
+
+rule "DLP - wykrycie wzorca karty kredytowej (dokładnie 16 cyfr)"
+    salience 70
+    when
+        $req : MessageScanRequest(
+            blocked == false,
+            plainTextContent != null,
+            plainTextContent matches ".*\\b\\d{16}\\b.*"
+        )
+    then
+        String msg = String.format(
+            "[DLP] Zablokowano wysyłkę wiadomości od '%s' — wykryto ciąg 16 cyfr " +
+            "odpowiadający wzorcowi numeru karty kredytowej (PAN). " +
+            "Przesyłanie danych kart płatniczych jest zabronione (wymóg PCI-DSS).",
+            $req.getSenderUsername()
+        );
+        $req.setBlocked(true);
+        $req.setAlertType("DLP_CARD_PATTERN");
+        $req.setAlertDescription(msg);
+        $req.setBlockReason(
+            "Wiadomość zawiera ciąg 16 cyfr (możliwy numer karty kredytowej). " +
+            "Przesyłanie danych kart płatniczych jest zabronione."
+        );
+        update($req);
+        System.out.println(">>> [Drools] DLP_CARD_PATTERN dla nadawcy: " + $req.getSenderUsername());
+end
+
+rule "DLP - wykrycie linku w treści wiadomości"
+    salience 70
+    when
+        $req : MessageScanRequest(
+            blocked == false,
+            plainTextContent != null,
+            plainTextContent matches "(?i).*(http://|https://|www\\.).*"
+        )
+    then
+        String msg = String.format(
+            "[DLP] Zablokowano wysyłkę wiadomości od '%s' — wykryto link w treści. " +
+            "Wysyłanie linków przez wiadomości zwykłe (AES) jest niedozwolone ze względu " +
+            "na ryzyko phishingu i wycieku danych.",
+            $req.getSenderUsername()
+        );
+        $req.setBlocked(true);
+        $req.setAlertType("DLP_LINK_DETECTED");
+        $req.setAlertDescription(msg);
+        $req.setBlockReason(
+            "Wiadomość zawiera link (http/https/www). " +
+            "Wysyłanie linków przez kanał AES jest niedozwolone."
+        );
+        update($req);
+        System.out.println(">>> [Drools] DLP_LINK_DETECTED dla nadawcy: " + $req.getSenderUsername());
+end

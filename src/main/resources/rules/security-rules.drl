@@ -1,0 +1,22 @@
+package rules;
+
+// ============================================================
+// IMPORTY FAKTÓW
+// ============================================================
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.LoginAttempt;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.MessageScanRequest;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.AlertEscalationRequest;
+
+// ============================================================
+// GLOBALNE ZMIENNE (wstrzykiwane przez DroolsSecurityService)
+// ============================================================
+// global org.slf4j.Logger log;
+
+// OLD
+
+
+
+
+
+
+

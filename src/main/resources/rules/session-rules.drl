@@ -1,0 +1,82 @@
+package rules;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.LoginAttempt;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.LoginAttempt;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.MessageScanRequest;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.AlertEscalationRequest;
+// ============================================================
+// SEKCJA 2: DYNAMICZNA OCENA RYZYKA SESJI — PORA DNIA
+//
+// Godziny pracy:     07:00–17:00 → brak alertu, logowanie normalne
+// Poza godzinami:    17:00–00:00 → LOW  (pracownik może zostawać po godzinach)
+// Godziny nocne:     00:00–07:00 → HIGH (nikt nie powinien być w biurze — blokada)
+//
+// Reguły oceniają TYLKO udane logowania (failed==false) lub wszystkie próby?
+// → Oceniamy KAŻDĄ próbę (udaną i nieudaną) dla godzin nocnych (HIGH).
+// → LOW rejestrujemy tylko dla udanych logowań (po godzinach, ale zalogował się).
+// ============================================================
+
+rule "Sesja - logowanie w godzinach wieczornych (17:00-24:00) - alert LOW"
+    salience 80
+    when
+        $attempt : LoginAttempt(
+            failed == false,
+            actionRequired == "NONE",
+            attemptTime != null,
+            attemptTime.getHour() >= 17
+        )
+    then
+        String msg = String.format(
+            "[MONITORING] Logowanie poza standardowymi godzinami pracy dla '%s' " +
+            "o godzinie %02d:%02d (IP: %s). " +
+            "Godziny pracy: 07:00–17:00. " +
+            "Logowanie dozwolone — pracownik mógł zostać po godzinach.",
+            $attempt.getUsername(),
+            $attempt.getAttemptTime().getHour(),
+            $attempt.getAttemptTime().getMinute(),
+            $attempt.getIpAddress()
+        );
+        $attempt.setActionRequired("ALERT_LOW");
+        $attempt.setAlertSeverity("LOW");
+        $attempt.setAlertType("LOGIN_AFTER_HOURS_LOW");
+        $attempt.setAlertDescription(msg);
+        update($attempt);
+        System.out.println(">>> [Drools] Reguła LOGIN_AFTER_HOURS_LOW dla: " + $attempt.getUsername()
+            + " o " + $attempt.getAttemptTime().getHour() + ":xx");
+end
+
+rule "Sesja - logowanie w godzinach nocnych (00:00-07:00) - alert HIGH i blokada"
+    salience 90
+    when
+        $attempt : LoginAttempt(
+            actionRequired != "BLOCK",
+            attemptTime != null,
+            attemptTime.getHour() >= 0,
+            attemptTime.getHour() < 7
+        )
+    then
+        String msg = String.format(
+            "[KRYTYCZNE] Próba logowania w godzinach NOCNYCH dla '%s' " +
+            "o godzinie %02d:%02d (IP: %s). " +
+            "W godzinach 00:00–07:00 nikt nie powinien przebywać w systemie. " +
+            "Konto zablokowane automatycznie na 24 godziny jako środek ostrożności.",
+            $attempt.getUsername(),
+            $attempt.getAttemptTime().getHour(),
+            $attempt.getAttemptTime().getMinute(),
+            $attempt.getIpAddress()
+        );
+        $attempt.setActionRequired("BLOCK");
+        $attempt.setAlertSeverity("HIGH");
+        $attempt.setAlertType("LOGIN_AFTER_HOURS_HIGH");
+        $attempt.setAlertDescription(msg);
+        $attempt.setBlockReason(String.format(
+            "LOGIN_AFTER_HOURS_HIGH: próba logowania o %02d:%02d z IP %s — godziny nocne (00:00–07:00)",
+            $attempt.getAttemptTime().getHour(),
+            $attempt.getAttemptTime().getMinute(),
+            $attempt.getIpAddress()
+        ));
+        update($attempt);
+        System.out.println(">>> [Drools] Reguła LOGIN_AFTER_HOURS_HIGH dla: " + $attempt.getUsername()
+            + " o " + $attempt.getAttemptTime().getHour() + ":xx");
+end
+
+

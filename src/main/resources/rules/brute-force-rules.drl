@@ -1,0 +1,41 @@
+package rules;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.LoginAttempt;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.MessageScanRequest;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.AlertEscalationRequest;
+// ============================================================
+// SEKCJA 1: DETEKCJA BRUTE-FORCE
+//
+// Reguła: Jeśli użytkownik ma więcej niż 5 nieudanych prób
+// logowania w ciągu ostatnich 3 minut → blokada konta (HIGH).
+// ============================================================
+
+rule "Brute Force - blokada konta po przekroczeniu progu"
+    salience 100
+    when
+        $attempt : LoginAttempt(
+            failed == true,
+            recentFailedAttempts > 5
+        )
+    then
+        String msg = String.format(
+            "[BEZPIECZEŃSTWO] BRUTE-FORCE wykryty dla użytkownika '%s' " +
+            "(IP: %s) — %d nieudanych prób logowania w ciągu 3 minut. " +
+            "Konto zablokowane automatycznie na 24 godziny.",
+            $attempt.getUsername(),
+            $attempt.getIpAddress(),
+            $attempt.getRecentFailedAttempts()
+        );
+        $attempt.setActionRequired("BLOCK");
+        $attempt.setAlertSeverity("HIGH");
+        $attempt.setAlertType("BRUTE_FORCE");
+        $attempt.setAlertDescription(msg);
+        $attempt.setBlockReason(String.format(
+            "BRUTE_FORCE: %d nieudanych logowań w 3 minuty z IP %s (%s)",
+            $attempt.getRecentFailedAttempts(),
+            $attempt.getIpAddress(),
+            $attempt.getAttemptTime().toString()
+        ));
+        update($attempt);
+        System.out.println(">>> [Drools] Reguła BRUTE_FORCE odpaliła się dla: " + $attempt.getUsername());
+end
+

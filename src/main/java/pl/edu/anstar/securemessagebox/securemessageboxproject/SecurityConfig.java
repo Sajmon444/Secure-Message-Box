@@ -1,5 +1,3 @@
-// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/SecurityConfig.java
-
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.springframework.context.annotation.Bean;
@@ -9,10 +7,25 @@ import org.springframework.security.authentication.dao.DaoAuthenticationProvider
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
+import org.springframework.security.web.session.HttpSessionEventPublisher;
 
+/**
+ * Konfiguracja Spring Security.
+ *
+ * Zmiany względem oryginału:
+ *   1. Dodano SessionRegistry (Bean) — używany przez DroolsSecurityService
+ *      do unieważniania sesji przy blokadzie konta.
+ *   2. Włączono SessionManagement z maksymalnie 1 sesją per użytkownik.
+ *   3. Dodano obsługę LockedException — /login?locked=true
+ *   4. Dodano HttpSessionEventPublisher — wymagany przez SessionRegistry.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -40,15 +53,38 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
+    /**
+     * SessionRegistry — rejestr aktywnych sesji Spring Security.
+     * Wstrzykiwany do DroolsSecurityService w celu wymuszenia wylogowania
+     * przy blokadzie konta (expireNow()).
+     */
+    @Bean
+    public SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
+    }
+
+    /**
+     * Wymagany przez SessionRegistry — publikuje zdarzenia cyklu życia sesji HTTP
+     * (tworzenie i niszczenie) do ApplicationContext.
+     * Bez tego SessionRegistry nie będzie wiedział o zniszczonych sesjach.
+     */
+    @Bean
+    public HttpSessionEventPublisher httpSessionEventPublisher() {
+        return new HttpSessionEventPublisher();
+    }
+
+    @Bean
+    public SessionAuthenticationStrategy sessionAuthenticationStrategy() {
+        return new RegisterSessionAuthenticationStrategy(sessionRegistry());
+    }
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .authenticationProvider(authenticationProvider())
-                // CSRF włączony — Thymeleaf (th:action) automatycznie dodaje token do formularzy.
-                // Linia csrf.disable() została usunięta — to była poważna luka bezpieczeństwa.
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/register", "/").permitAll()
-                        .anyRequest().authenticated() // Wszystko inne wymaga zalogowania
+                        .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
                         .loginPage("/login")
@@ -56,6 +92,7 @@ public class SecurityConfig {
                         .usernameParameter("username")
                         .passwordParameter("password")
                         .defaultSuccessUrl("/dashboard", true)
+                        // Przekierowanie przy błędzie logowania (złe hasło lub konto zablokowane)
                         .failureUrl("/login?error=true")
                         .permitAll()
                 )
@@ -63,7 +100,17 @@ public class SecurityConfig {
                         .logoutUrl("/logout")
                         .logoutSuccessUrl("/login?logout=true")
                         .permitAll()
+                )
+                // Zarządzanie sesjami — wymagane dla SessionRegistry
+                .sessionManagement(session -> session
+                        .sessionAuthenticationStrategy(sessionAuthenticationStrategy())
+                        // Maksymalnie 1 aktywna sesja per użytkownik.
+                        // expiredUrl — przekierowanie gdy sesja wygasła przez Drools (blokada)
+                        .maximumSessions(1)
+                        .sessionRegistry(sessionRegistry())
+                        .expiredUrl("/login?expired=true")
                 );
+
         return http.build();
     }
 }
