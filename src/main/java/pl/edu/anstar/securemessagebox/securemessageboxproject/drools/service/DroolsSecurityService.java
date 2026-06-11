@@ -19,7 +19,10 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.entity.UserSession
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.AppUserRepository;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.SecurityAlertRepository;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.UserSessionRepository;
-
+import jakarta.servlet.http.HttpSession;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -97,27 +100,20 @@ public class DroolsSecurityService {
     }
 
     private void handleLoginAttemptResult(LoginAttempt attempt) {
-        AppUser user = appUserRepository.findByUsername(attempt.getUsername()).orElse(null);
-        if (user == null) return;
+        // Używamy .orElseThrow dla bezpieczeństwa
+        AppUser user = appUserRepository.findByUsername(attempt.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found: " + attempt.getUsername()));
 
         switch (attempt.getActionRequired()) {
             case "BLOCK" -> {
-                // Zapisz alert HIGH
-                saveAlert(user, attempt.getAlertSeverity(),
-                        attempt.getAlertType(), attempt.getAlertDescription());
-                // Zablokuj konto
+                saveAlert(user, attempt.getAlertSeverity(), attempt.getAlertType(), attempt.getAlertDescription());
                 blockAccount(user, attempt.getBlockReason(), "SECURITY_BLOCK_" + attempt.getAlertType());
-                log.warn("[SECURITY] Konto '{}' zablokowane przez Drools. Powód: {}",
-                        attempt.getUsername(), attempt.getBlockReason());
             }
             case "ALERT_LOW" -> {
-                // Zapisz alert LOW + sprawdź eskalację
-                saveAlert(user, attempt.getAlertSeverity(),
-                        attempt.getAlertType(), attempt.getAlertDescription());
+                saveAlert(user, attempt.getAlertSeverity(), attempt.getAlertType(), attempt.getAlertDescription());
+                // Eskalacja wymaga aktualnych danych, dlatego wywołujemy ją po zapisie alertu
                 checkEscalation(user);
-                log.info("[SECURITY] Alert LOW dla '{}': {}", attempt.getUsername(), attempt.getAlertType());
             }
-            default -> log.debug("[Drools] Brak akcji dla logowania '{}'", attempt.getUsername());
         }
     }
 
@@ -267,8 +263,36 @@ public class DroolsSecurityService {
                 });
     }
 
+    /**
+     * Unieważnia aktualną sesję HTTP (jeśli istnieje)
+     * oraz czyści SecurityContext bieżącego wątku.
+     */
+    private void invalidateCurrentHttpSession() {
+        try {
+            SecurityContextHolder.clearContext();
+
+            ServletRequestAttributes attr =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+
+            if (attr != null) {
+                HttpSession session = attr.getRequest().getSession(false);
+
+                if (session != null) {
+                    String sessionId = session.getId();
+                    session.invalidate();
+
+                    log.info("[SESSION] Aktualna sesja HTTP unieważniona: {}", sessionId);
+                }
+            }
+        } catch (IllegalStateException ex) {
+            log.debug("[SESSION] Sesja była już unieważniona");
+        } catch (Exception ex) {
+            log.error("[SESSION] Błąd podczas unieważniania aktualnej sesji HTTP", ex);
+        }
+    }
+
     // =========================================================
-    // 5. METODY POMOCNICZE
+    // METODY POMOCNICZE
     // =========================================================
 
     /** Zapisuje alert bezpieczeństwa do tabeli security_alert. */

@@ -90,7 +90,19 @@
     <h2>🔐 Logowanie</h2>
 
     <!-- Komunikat błędu logowania -->
+    <!-- Konto zablokowane -->
+    <div th:if="${param.locked}" class="msg-error">
+        Konto zostało zablokowane z powodów bezpieczeństwa.
+        Skontaktuj się z administratorem systemu.
+    </div>
+
+    <!-- Komunikat błędu logowania -->
     <div th:if="${errorMsg}" class="msg-error" th:text="${errorMsg}"></div>
+
+    <!-- Standardowy błąd Spring Security -->
+    <div th:if="${param.error}" class="msg-error">
+        Nieprawidłowa nazwa użytkownika lub hasło.
+    </div>
 
     <!-- Komunikat po wylogowaniu -->
     <div th:if="${logoutMsg}" class="msg-success" th:text="${logoutMsg}"></div>

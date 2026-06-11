@@ -15,25 +15,31 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.session.RegisterSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.session.HttpSessionEventPublisher;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.security.CustomAuthFailureHandler;
 
 /**
  * Konfiguracja Spring Security.
  *
- * Zmiany względem oryginału:
- *   1. Dodano SessionRegistry (Bean) — używany przez DroolsSecurityService
- *      do unieważniania sesji przy blokadzie konta.
- *   2. Włączono SessionManagement z maksymalnie 1 sesją per użytkownik.
- *   3. Dodano obsługę LockedException — /login?locked=true
- *   4. Dodano HttpSessionEventPublisher — wymagany przez SessionRegistry.
+ * Zmiany:
+ * 1. SessionRegistry do zarządzania aktywnymi sesjami.
+ * 2. Maksymalnie 1 sesja na użytkownika.
+ * 3. CustomAuthFailureHandler obsługujący różne błędy logowania
+ *    (np. konto zablokowane).
+ * 4. HttpSessionEventPublisher wymagany przez SessionRegistry.
  */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     private final AppUserDetailsService appUserDetailsService;
+    private final CustomAuthFailureHandler customAuthFailureHandler;
 
-    public SecurityConfig(AppUserDetailsService appUserDetailsService) {
+    public SecurityConfig(
+            AppUserDetailsService appUserDetailsService,
+            CustomAuthFailureHandler customAuthFailureHandler) {
+
         this.appUserDetailsService = appUserDetailsService;
+        this.customAuthFailureHandler = customAuthFailureHandler;
     }
 
     @Bean
@@ -43,20 +49,20 @@ public class SecurityConfig {
 
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(appUserDetailsService);
+        DaoAuthenticationProvider provider =
+                new DaoAuthenticationProvider(appUserDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
 
     @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+    public AuthenticationManager authenticationManager(
+            AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
     /**
-     * SessionRegistry — rejestr aktywnych sesji Spring Security.
-     * Wstrzykiwany do DroolsSecurityService w celu wymuszenia wylogowania
-     * przy blokadzie konta (expireNow()).
+     * Rejestr aktywnych sesji.
      */
     @Bean
     public SessionRegistry sessionRegistry() {
@@ -64,9 +70,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Wymagany przez SessionRegistry — publikuje zdarzenia cyklu życia sesji HTTP
-     * (tworzenie i niszczenie) do ApplicationContext.
-     * Bez tego SessionRegistry nie będzie wiedział o zniszczonych sesjach.
+     * Publikuje zdarzenia tworzenia/usuwania sesji.
      */
     @Bean
     public HttpSessionEventPublisher httpSessionEventPublisher() {
@@ -80,32 +84,33 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
         http
                 .authenticationProvider(authenticationProvider())
+
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/login", "/register", "/").permitAll()
                         .anyRequest().authenticated()
                 )
+
                 .formLogin(form -> form
                         .loginPage("/login")
                         .loginProcessingUrl("/login")
                         .usernameParameter("username")
                         .passwordParameter("password")
                         .defaultSuccessUrl("/dashboard", true)
-                        // Przekierowanie przy błędzie logowania (złe hasło lub konto zablokowane)
-                        .failureUrl("/login?error=true")
+                        .failureHandler(customAuthFailureHandler)
                         .permitAll()
                 )
+
                 .logout(logout -> logout
                         .logoutUrl("/logout")
                         .logoutSuccessUrl("/login?logout=true")
                         .permitAll()
                 )
-                // Zarządzanie sesjami — wymagane dla SessionRegistry
+
                 .sessionManagement(session -> session
                         .sessionAuthenticationStrategy(sessionAuthenticationStrategy())
-                        // Maksymalnie 1 aktywna sesja per użytkownik.
-                        // expiredUrl — przekierowanie gdy sesja wygasła przez Drools (blokada)
                         .maximumSessions(1)
                         .sessionRegistry(sessionRegistry())
                         .expiredUrl("/login?expired=true")

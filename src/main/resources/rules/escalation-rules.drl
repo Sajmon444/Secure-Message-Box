@@ -65,3 +65,28 @@ rule "Eskalacja - 5x LOW w 10 minut → HIGH i blokada"
         update($esc);
         System.out.println(">>> [Drools] ESCALATION (5×LOW) dla: " + $esc.getUsername());
 end
+
+rule "Eskalacja - 3x MEDIUM w 10 minut → HIGH i blokada"
+    salience 60
+    when
+        $esc : AlertEscalationRequest(
+            shouldEscalate == false,
+            mediumAlertsLast10Min >= 3
+        )
+    then
+        String msg = String.format(
+            "[ESKALACJA] Automatyczna eskalacja alertów dla użytkownika '%s': " +
+            "%d alertów MEDIUM w ciągu 10 minut. " +
+            "Konto zablokowane na 24 godziny ze względu na wielokrotne naruszenia DLP.",
+            $esc.getUsername(),
+            $esc.getMediumAlertsLast10Min()
+        );
+        $esc.setShouldEscalate(true);
+        $esc.setEscalationDescription(msg);
+        $esc.setBlockReason(String.format(
+            "ESCALATION: %d×MEDIUM w 10 min — automatyczna eskalacja do HIGH",
+            $esc.getMediumAlertsLast10Min()
+        ));
+        update($esc);
+        System.out.println(">>> [Drools] ESCALATION (3×MEDIUM) dla: " + $esc.getUsername());
+end

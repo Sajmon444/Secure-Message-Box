@@ -1,16 +1,19 @@
 package pl.edu.anstar.securemessagebox.securemessageboxproject.security;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.security.authentication.event.AbstractAuthenticationFailureEvent;
 import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.model.LoginAttempt;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.drools.service.DroolsSecurityService;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.entity.AppUser;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.entity.UserSession;
@@ -19,6 +22,10 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.Securit
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.UserSessionRepository;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Listener zdarzeń Spring Security — most między Spring a Drools.
@@ -37,55 +44,66 @@ import java.time.LocalDateTime;
 public class LoginAttemptListener {
 
     private static final Logger log = LoggerFactory.getLogger(LoginAttemptListener.class);
-
-    private final DroolsSecurityService  droolsSecurityService;
-    private final AppUserRepository      appUserRepository;
+    private final DroolsSecurityService droolsSecurityService;
+    private final AppUserRepository appUserRepository;
+    private final UserSessionRepository userSessionRepository;
     private final SecurityAlertRepository securityAlertRepository;
-    private final UserSessionRepository  userSessionRepository;
 
-    // ---- Udane logowanie ----
+    // Pamięć podręczna do śledzenia nieudanych logowań w pamięci (zastępuje problematyczne odpytywanie bazy)
+    private final Map<String, List<LocalDateTime>> failedAttempts = new ConcurrentHashMap<>();
 
     @EventListener
     public void onSuccess(AuthenticationSuccessEvent event) {
         String username = extractUsername(event.getAuthentication().getPrincipal());
         if (username == null) return;
-
         AppUser user = appUserRepository.findByUsername(username).orElse(null);
         if (user == null) return;
 
         String ip = getClientIp();
-        // Liczba nieudanych prób z ostatnich 3 min (przed sukcesem — nieistotne, ale dla spójności)
-        int recentFailed = securityAlertRepository.countRecentHighAlerts(user.getId(), 3);
+        failedAttempts.remove(username); // Resetujemy błędy po udanym zalogowaniu
 
-        // Drools ocenia porę dnia (nawet dla udanego logowania)
-        droolsSecurityService.evaluateLoginAttempt(
-                user.getId(), username, false, ip, recentFailed);
+        LoginAttempt attempt = droolsSecurityService.evaluateLoginAttempt(user.getId(), username, false, ip, 0);
 
-        // Zarejestruj sesję Spring Security w tabeli user_session (audyt + na potrzeby blokad)
+        // Jeśli Drools zablokował konto podczas poprawnego logowania (np. logowanie nocne)
+        if ("BLOCK".equals(attempt.getActionRequired())) {
+            forceLogoutImmediately(); // Niszczymy sesję, użytkownik nie przejdzie dalej
+            return;
+        }
+
         registerSession(user, ip);
     }
-
-    // ---- Nieudane logowanie ----
 
     @EventListener
     public void onFailure(AbstractAuthenticationFailureEvent event) {
         String username = extractUsername(event.getAuthentication().getPrincipal());
         if (username == null) return;
-
         AppUser user = appUserRepository.findByUsername(username).orElse(null);
-        if (user == null) {
-            log.debug("[LOGIN] Nieudana próba logowania dla nieznanego użytkownika: '{}'", username);
-            return;
-        }
+        if (user == null) return;
 
         String ip = getClientIp();
-        // Pobierz liczbę nieudanych prób z ostatnich 3 minut (z bazy alertów HIGH)
-        // UWAGA: używamy prostego zliczania z tabeli security_alert dla spójności.
-        // Można też użyć dedykowanej tabeli failed_login_attempts — to uproszczenie.
-        int recentFailed = countRecentFailedAttempts(user.getId());
+        int recentFailed = recordAndCountFailedAttempt(username); // Liczymy błędne próby z pamięci RAM
 
-        droolsSecurityService.evaluateLoginAttempt(
-                user.getId(), username, true, ip, recentFailed);
+        droolsSecurityService.evaluateLoginAttempt(user.getId(), username, true, ip, recentFailed);
+    }
+
+    private int recordAndCountFailedAttempt(String username) {
+        List<LocalDateTime> attempts = failedAttempts.computeIfAbsent(username, k -> new ArrayList<>());
+        LocalDateTime now = LocalDateTime.now();
+        attempts.add(now);
+        // Usuwamy próby starsze niż 3 minuty
+        attempts.removeIf(time -> time.isBefore(now.minusMinutes(3)));
+        return attempts.size();
+    }
+
+    private void forceLogoutImmediately() {
+        SecurityContextHolder.clearContext();
+        HttpServletRequest request = getCurrentRequest();
+        if (request != null) {
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.invalidate(); // Natychmiastowe ubicie sesji na poziomie serwera
+            }
+        }
     }
 
     // ---- Metody pomocnicze ----
