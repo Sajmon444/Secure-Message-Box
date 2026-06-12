@@ -84,15 +84,15 @@
         <form th:action="@{/messages/decrypt/{id}(id=${msg.id})}" method="post">
             <div class="decrypt-form">
                 <input type="password" name="msgPassword"
-                       th:placeholder="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}
-                           ? 'Twoje hasło logowania (odszyfrowuje klucz RSA z bazy)'
-                           : 'Hasło wiadomości (ustawione przez nadawcę)'"
+                        th:placeholder="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}
+                        ? 'Twoje hasło E2EE ustawione przy rejestracji'
+                        : 'Hasło wiadomości (ustawione przez nadawcę)'"
                        required/>
                 <button type="submit">Odszyfruj</button>
             </div>
             <div class="hint"
                  th:if="${msg.category.categoryName == 'END_TO_END_ENCRYPTED'}">
-                Wpisz swoje hasło logowania — serwer odszyfrowuje Twój klucz prywatny RSA (PBKDF2+AES)
+                Wpisz swoje hasło E2EE ustawione przy rejestracji — serwer odszyfrowuje Twój klucz prywatny RSA (PBKDF2+AES)
                 i weryfikuje podpis Ed25519 nadawcy.
             </div>
             <div class="hint"
