@@ -25,6 +25,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.transaction.annotation.Propagation;
 
 /**
  * Główny serwis integrujący Drools z logiką bezpieczeństwa aplikacji.
@@ -72,7 +73,7 @@ public class DroolsSecurityService {
      * @param recentFailedAttempts liczba nieudanych prób z ostatnich 3 min (z bazy)
      * @return LoginAttempt po odpaleniu reguł (zawiera actionRequired, alertSeverity, itd.)
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public LoginAttempt evaluateLoginAttempt(Long userId, String username,
                                              boolean failed, String ipAddress,
                                              int recentFailedAttempts) {
@@ -136,7 +137,7 @@ public class DroolsSecurityService {
      *         blocked=false → wiadomość może być wysłana
      *         blocked=true  → wysyłka zablokowana, blockReason zawiera komunikat dla użytkownika
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public MessageScanRequest scanMessageContent(Long senderId, String senderUsername,
                                                  Long receiverId, String plainText) {
         MessageScanRequest req = new MessageScanRequest(senderId, senderUsername, receiverId, plainText);

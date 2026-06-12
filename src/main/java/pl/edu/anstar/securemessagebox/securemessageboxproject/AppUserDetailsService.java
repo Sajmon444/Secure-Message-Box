@@ -1,7 +1,6 @@
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
-import org.springframework.security.authentication.LockedException;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -9,23 +8,24 @@ import org.springframework.stereotype.Service;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.entity.AppUser;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.AppUserRepository;
 
-import java.time.format.DateTimeFormatter;
-
 /**
- * Implementacja UserDetailsService z obsługą blokady konta.
+ * Implementacja UserDetailsService używana przez Spring Security.
  *
  * Spring Security wywołuje tę klasę podczas każdej próby logowania.
- * Jeśli konto jest zablokowane (accountStatus=BLOCKED i blokada jeszcze trwa),
- * rzucamy LockedException — Spring tłumaczy to na komunikat o zablokowaniu konta
- * i przekierowuje na /login?locked=true.
+ * Na podstawie nazwy użytkownika pobierany jest rekord z bazy danych,
+ * a następnie tworzony jest obiekt UserDetails wykorzystywany
+ * podczas procesu uwierzytelniania.
  *
- * Zmiana względem oryginału:
- *   Dodano sprawdzenie isCurrentlyBlocked() przed budowaniem UserDetails.
+ * Obsługa blokady konta:
+ * Jeśli użytkownik jest aktualnie zablokowany
+ * (np. przez mechanizm Drools lub inną logikę biznesową),
+ * pole accountNonLocked zostaje ustawione na false.
+ *
+ * Dzięki temu Spring Security automatycznie traktuje konto
+ * jako zablokowane i uniemożliwia zalogowanie użytkownika.
  */
 @Service
 public class AppUserDetailsService implements UserDetailsService {
-
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
 
     private final AppUserRepository appUserRepository;
 
@@ -33,29 +33,45 @@ public class AppUserDetailsService implements UserDetailsService {
         this.appUserRepository = appUserRepository;
     }
 
+    /**
+     * Ładuje dane użytkownika na potrzeby uwierzytelniania.
+     *
+     * @param username nazwa użytkownika podana podczas logowania
+     * @return obiekt UserDetails wymagany przez Spring Security
+     * @throws UsernameNotFoundException gdy użytkownik nie istnieje
+     */
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+
+        // Pobranie użytkownika z bazy danych
         AppUser appUser = appUserRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException(
                         "Nie znaleziono użytkownika: " + username));
 
-        // Sprawdź czy konto jest zablokowane przez Drools
-        if (appUser.isCurrentlyBlocked()) {
-            String until = appUser.getBlockedUntil() != null
-                    ? " Blokada do: " + appUser.getBlockedUntil().format(FMT) + "."
-                    : "";
-            String reason = appUser.getBlockReason() != null
-                    ? " Powód: " + appUser.getBlockReason()
-                    : "";
-            throw new LockedException(
-                    "Konto '" + username + "' jest tymczasowo zablokowane." + until + reason
-            );
-        }
+        /*
+         * Konto jest uznawane za niezablokowane tylko wtedy,
+         * gdy metoda isCurrentlyBlocked() zwraca false.
+         */
+        boolean isAccountNonLocked = !appUser.isCurrentlyBlocked();
 
-        return User.builder()
-                .username(appUser.getUsername())
-                .password(appUser.getPasswordHash())
-                .roles("USER")
-                .build();
+        /*
+         * Tworzenie obiektu UserDetails używanego przez Spring Security.
+         *
+         * Parametry:
+         * enabled                -> konto aktywne
+         * accountNonExpired      -> konto nie wygasło
+         * credentialsNonExpired  -> hasło nie wygasło
+         * accountNonLocked       -> konto nie jest zablokowane
+         * authorities            -> role/uprawnienia użytkownika
+         */
+        return new org.springframework.security.core.userdetails.User(
+                appUser.getUsername(),
+                appUser.getPasswordHash(),
+                true,   // enabled
+                true,   // accountNonExpired
+                true,   // credentialsNonExpired
+                isAccountNonLocked,
+                AuthorityUtils.createAuthorityList("ROLE_USER")
+        );
     }
 }

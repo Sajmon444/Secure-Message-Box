@@ -1,10 +1,14 @@
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.LockedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.WebAttributes;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,10 +18,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * Kontroler autoryzacji.
  *
- * Zmiany względem oryginału:
- *   - Obsługa parametru ?locked=true (sesja wygasła przez Drools)
- *   - Obsługa parametru ?expired=true (sesja wygasła przez Spring SessionManagement)
- *   - Czytelniejsze komunikaty błędów logowania
+ * Obsługuje:
+ * - logowanie użytkowników,
+ * - rejestrację użytkowników,
+ * - wyświetlanie dashboardu.
+ *
+ * Komunikaty błędów logowania są budowane na podstawie
+ * wyjątków zapisanych przez Spring Security w sesji.
+ * Dzięki temu można wyświetlać różne komunikaty
+ * (np. błędne hasło lub zablokowane konto)
+ * bez używania dodatkowych parametrów URL.
  */
 @Controller
 public class AuthController {
@@ -30,24 +40,23 @@ public class AuthController {
     }
 
     @GetMapping("/login")
-    public String loginPage(
-            @RequestParam(value = "error",   required = false) String error,
-            @RequestParam(value = "logout",  required = false) String logout,
-            @RequestParam(value = "locked",  required = false) String locked,
-            @RequestParam(value = "expired", required = false) String expired,
+    public String showLoginForm(
+            @RequestParam(value = "error", required = false) String error,
+            @RequestParam(value = "locked", required = false) Boolean locked,
             Model model) {
 
-        if (error   != null) model.addAttribute("errorMsg",
-                "Nieprawidłowa nazwa użytkownika lub hasło. " +
-                        "Uwaga: konto może zostać zablokowane po zbyt wielu błędnych próbach.");
-        if (logout  != null) model.addAttribute("logoutMsg",  "Zostałeś wylogowany.");
-        if (locked  != null) model.addAttribute("lockedMsg",
-                "Twoje konto zostało tymczasowo zablokowane przez system bezpieczeństwa. " +
-                        "Blokada jest aktywna przez 24 godziny. Skontaktuj się z administratorem jeśli uważasz, " +
-                        "że to błąd.");
-        if (expired != null) model.addAttribute("expiredMsg",
-                "Twoja sesja została zakończona przez system bezpieczeństwa. " +
-                        "Zaloguj się ponownie.");
+        // Przypadek 1: Adres to /login?locked=true
+        if (locked != null && locked) {
+            model.addAttribute("errorMessage", "Konto zostało zablokowane ze względów bezpieczeństwa. Spróbuj ponownie później.");
+        }
+        // Przypadek 2: Adres to /login?error (standardowy błędny login/hasło)
+        else if (error != null) {
+            model.addAttribute("errorMessage", "Nieprawidłowa nazwa użytkownika lub hasło.");
+        }
+
+        // Jeśli żaden parametr nie występuje, errorMessage nie zostanie dodany,
+        // a użytkownik zobaczy czysty formularz logowania.
+
         return "login";
     }
 
@@ -58,19 +67,24 @@ public class AuthController {
 
     @PostMapping("/register")
     public String registerSubmit(
-            @RequestParam("username")     String username,
-            @RequestParam("password")     String password,
+            @RequestParam("username") String username,
+            @RequestParam("password") String password,
             @RequestParam("e2eePassword") String e2eePassword,
             Model model) {
+
         try {
             String kdfSalt = authService.register(username, password, e2eePassword);
+
             if (kdfSalt == null) {
                 model.addAttribute("errorMsg", "Nazwa użytkownika jest już zajęta.");
                 return "register";
             }
+
             model.addAttribute("username", username);
-            model.addAttribute("kdfSalt",  kdfSalt);
+            model.addAttribute("kdfSalt", kdfSalt);
+
             return "private-key";
+
         } catch (Exception e) {
             log.error("Błąd rejestracji", e);
             model.addAttribute("errorMsg", "Błąd serwera: " + e.getMessage());

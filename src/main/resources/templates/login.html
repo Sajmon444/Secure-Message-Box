@@ -89,30 +89,14 @@
 <div class="box">
     <h2>🔐 Logowanie</h2>
 
-    <!-- Komunikat błędu logowania -->
-    <!-- Konto zablokowane -->
-    <div th:if="${param.locked}" class="msg-error">
-        Konto zostało zablokowane z powodów bezpieczeństwa.
-        Skontaktuj się z administratorem systemu.
-    </div>
+    <div th:if="${errorMessage}" class="msg-error" th:text="${errorMessage}"></div>
 
-    <!-- Komunikat błędu logowania -->
-    <div th:if="${errorMsg}" class="msg-error" th:text="${errorMsg}"></div>
-
-    <!-- Standardowy błąd Spring Security -->
-    <div th:if="${param.error}" class="msg-error">
-        Nieprawidłowa nazwa użytkownika lub hasło.
-    </div>
-
-    <!-- Komunikat po wylogowaniu -->
     <div th:if="${logoutMsg}" class="msg-success" th:text="${logoutMsg}"></div>
 
-    <!-- Komunikat po rejestracji -->
     <div th:if="${param.registered}" class="msg-success">
         Rejestracja zakończona! Możesz się teraz zalogować.
     </div>
 
-    <!-- Spring Security odbiera POST /login samodzielnie -->
     <form th:action="@{/login}" method="post">
         <label for="username">Nazwa użytkownika</label>
         <input type="text" id="username" name="username" placeholder="Wpisz nazwę użytkownika" required autofocus/>
