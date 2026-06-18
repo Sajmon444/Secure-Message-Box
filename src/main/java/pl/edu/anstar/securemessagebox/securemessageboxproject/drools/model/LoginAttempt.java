@@ -10,16 +10,16 @@ import java.time.LocalDateTime;
  *
  * Wrzucany do KieSession przez LoginAttemptService przy każdej próbie logowania.
  * Silnik reguł analizuje:
- *   1. Czy przekroczono próg brute-force (>5 błędnych prób w 3 min) → HIGH
+ *   1. Czy przekroczono próg brute-force (>5 błędnych prób w 3 min) - HIGH
  *   2. O jakiej porze dnia nastąpiła próba:
- *      07:00–17:00 → brak alertu (godziny pracy)
- *      17:00–24:00 → LOW  (pracownik poza godzinami, ale dopuszczalne)
- *      00:00–07:00 → HIGH (nikt nie powinien być w systemie — blokada konta)
+ *      07:00–17:00 - brak alertu (godziny pracy)
+ *      17:00–24:00 - LOW  (pracownik poza godzinami, ale dopuszczalne)
+ *      00:00–07:00 - HIGH (nikt nie powinien być w systemie — blokada konta)
  *
  * Po odpaleniu reguł pole {@code actionRequired} wskazuje co zrobić:
- *   NONE         → brak akcji
- *   BLOCK        → zablokuj konto na 24h
- *   ALERT_LOW    → zapisz alert LOW, przepuść logowanie
+ *   NONE         - brak akcji
+ *   BLOCK        - zablokuj konto na 24h
+ *   ALERT_LOW    - zapisz alert LOW, przepuść logowanie
  */
 @Data
 @NoArgsConstructor

@@ -1,5 +1,3 @@
-// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/E2eeService.java
-
 package pl.edu.anstar.securemessagebox.securemessageboxproject;
 
 import org.springframework.stereotype.Service;
@@ -16,21 +14,8 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
 /**
- * E2EE: RSA-2048 (szyfrowanie) + Ed25519 (podpis) + PBKDF2+AES-GCM (ochrona kluczy prywatnych).
- *
- * Klucze prywatne użytkowników (RSA i Ed25519) są chronione przez:
- *   PBKDF2WithHmacSHA256 (100 000 iteracji) - klucz AES-256
- *   AES-256-GCM (NoPadding, 12-bajtowy IV, 128-bitowy tag)
- *
- * Zmiana CBC - GCM eliminuje ataki Padding Oracle na przechowywane klucze prywatne.
- * Każda próba modyfikacji zaszyfrowanego klucza w bazie powoduje AEADBadTagException
- * zanim cokolwiek zostanie odszyfrowane.
- *
- * Format danych w bazie (Base64):
- *   encrypted_private_key / encrypted_signing_priv_key:
- *     [ IV_12B || szyfrogram_klucza || tag_GCM_16B ]
- *
-
+ * Serwis obsługujący mechanizmy E2EE: szyfrowanie RSA, podpisy cyfrowe Ed25519
+ * oraz zabezpieczenie kluczy prywatnych za pomocą PBKDF2 i AES-256-GCM.
  */
 @Service
 public class E2eeService {
@@ -40,29 +25,30 @@ public class E2eeService {
     private static final String KDF_ALGORITHM  = "PBKDF2WithHmacSHA256";
     private static final int    KDF_ITERATIONS = 100_000;
     private static final int    KDF_KEY_BITS   = 256;
-    private static final String AES_CIPHER     = "AES/GCM/NoPadding";   // CBC - GCM
-    private static final int    GCM_TAG_BITS   = 128;                    // 16-bajtowy tag
-    private static final int    IV_BYTES       = 12;                     // GCM: 12 bajtów (nie 16!)
+    private static final String AES_CIPHER     = "AES/GCM/NoPadding";
+    private static final int    GCM_TAG_BITS   = 128;
+    private static final int    IV_BYTES       = 12;
 
-    // =========================================================
-    // Generowanie kluczy
-    // =========================================================
-
+    /**
+     * Generowanie pary kluczy RSA.
+     */
     public KeyPair generateRsaKeyPair() throws Exception {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
         gen.initialize(RSA_KEY_SIZE, new SecureRandom());
         return gen.generateKeyPair();
     }
 
+    /**
+     * Generowanie pary kluczy Ed25519 dla podpisów cyfrowych.
+     */
     public KeyPair generateSigningKeyPair() throws Exception {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("Ed25519");
         return gen.generateKeyPair();
     }
 
-    // =========================================================
-    // PBKDF2 + AES-GCM: szyfrowanie kluczy prywatnych
-    // =========================================================
-
+    /**
+     * Generowanie losowej soli dla funkcji wyprowadzania klucza (KDF).
+     */
     public String generateKdfSalt() {
         byte[] salt = new byte[16];
         new SecureRandom().nextBytes(salt);
@@ -70,28 +56,20 @@ public class E2eeService {
     }
 
     /**
-     * Szyfruje klucz prywatny (RSA lub Ed25519) hasłem E2EE przez PBKDF2+AES-256-GCM.
-     *
-     * Format wyniku (Base64):
-     *   [ IV_12B || szyfrogram || tag_GCM_16B ]
-     *
-     * IV jest przechowywany razem z szyfrogramem — to standardowa praktyka;
-     * tajność IV nie jest wymagana (tajność zapewnia klucz AES).
+     * Szyfrowanie klucza prywatnego algorytmem AES-256-GCM z wykorzystaniem hasła.
      */
     public String encryptPrivateKey(PrivateKey privateKey, String password, String kdfSaltBase64)
             throws Exception {
         SecretKey aesKey = deriveAesKey(password, kdfSaltBase64);
 
-        byte[] iv = new byte[IV_BYTES];          // 12 bajtów dla GCM
+        byte[] iv = new byte[IV_BYTES];
         new SecureRandom().nextBytes(iv);
 
         Cipher cipher = Cipher.getInstance(AES_CIPHER);
         cipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
 
-        // doFinal  [szyfrogram || tag_16B]
         byte[] encryptedKeyBytes = cipher.doFinal(privateKey.getEncoded());
 
-        // Prepend IV: [IV_12B || szyfrogram || tag_16B]
         byte[] combined = new byte[IV_BYTES + encryptedKeyBytes.length];
         System.arraycopy(iv, 0, combined, 0, IV_BYTES);
         System.arraycopy(encryptedKeyBytes, 0, combined, IV_BYTES, encryptedKeyBytes.length);
@@ -100,8 +78,7 @@ public class E2eeService {
     }
 
     /**
-     * Odszyfrowuje klucz prywatny RSA.
-     * MUSI być używane wyłącznie dla kluczy RSA.
+     * Odszyfrowanie klucza prywatnego RSA.
      */
     public PrivateKey decryptRsaPrivateKey(String encryptedBase64, String password,
                                            String kdfSaltBase64) throws Exception {
@@ -110,8 +87,7 @@ public class E2eeService {
     }
 
     /**
-     * Odszyfrowuje klucz prywatny Ed25519.
-     * MUSI być używane wyłącznie dla kluczy Ed25519.
+     * Odszyfrowanie klucza prywatnego Ed25519.
      */
     public PrivateKey decryptEd25519PrivateKey(String encryptedBase64, String password,
                                                String kdfSaltBase64) throws Exception {
@@ -120,30 +96,27 @@ public class E2eeService {
     }
 
     /**
-     * Wspólna logika AES-GCM deszyfrowania kluczy prywatnych.
-     * Odczytuje IV_BYTES (12) z początku tablicy, reszta to szyfrogram+tag.
-     * GCM weryfikuje tag automatycznie — AEADBadTagException przy złym haśle lub manipulacji.
+     * Wspólna procedura deszyfrowania bajtów klucza przy użyciu AES-GCM.
      */
     private byte[] decryptKeyBytes(String encryptedBase64, String password, String kdfSaltBase64)
             throws Exception {
         SecretKey aesKey = deriveAesKey(password, kdfSaltBase64);
         byte[] combined = Base64.getDecoder().decode(encryptedBase64);
 
-        byte[] iv  = new byte[IV_BYTES];                           // 12 bajtów
-        byte[] enc = new byte[combined.length - IV_BYTES];         // szyfrogram + tag
+        byte[] iv  = new byte[IV_BYTES];
+        byte[] enc = new byte[combined.length - IV_BYTES];
         System.arraycopy(combined, 0, iv, 0, IV_BYTES);
         System.arraycopy(combined, IV_BYTES, enc, 0, enc.length);
 
         Cipher cipher = Cipher.getInstance(AES_CIPHER);
         cipher.init(Cipher.DECRYPT_MODE, aesKey, new GCMParameterSpec(GCM_TAG_BITS, iv));
 
-        return cipher.doFinal(enc);  // AEADBadTagException gdy dane zmienione lub złe hasło
+        return cipher.doFinal(enc);
     }
 
-    // =========================================================
-    // RSA: szyfrowanie / deszyfrowanie treści wiadomości E2EE
-    // =========================================================
-
+    /**
+     * Szyfrowanie treści wiadomości kluczem publicznym RSA.
+     */
     public String rsaEncrypt(String plainText, String publicKeyBase64) throws Exception {
         byte[] keyBytes = Base64.getDecoder().decode(publicKeyBase64);
         PublicKey publicKey = KeyFactory.getInstance("RSA")
@@ -154,6 +127,9 @@ public class E2eeService {
                 cipher.doFinal(plainText.getBytes("UTF-8")));
     }
 
+    /**
+     * Deszyfrowanie treści wiadomości kluczem prywatnym RSA.
+     */
     public String rsaDecrypt(String encryptedBase64, PrivateKey privateKey) throws Exception {
         Cipher cipher = Cipher.getInstance(RSA_CIPHER);
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
@@ -161,10 +137,9 @@ public class E2eeService {
                 cipher.doFinal(Base64.getDecoder().decode(encryptedBase64)), "UTF-8");
     }
 
-    // =========================================================
-    // Ed25519: podpis i weryfikacja
-    // =========================================================
-
+    /**
+     * Generowanie podpisu cyfrowego Ed25519.
+     */
     public String sign(String data, PrivateKey signingPrivateKey) throws Exception {
         Signature signer = Signature.getInstance("Ed25519");
         signer.initSign(signingPrivateKey);
@@ -172,6 +147,9 @@ public class E2eeService {
         return Base64.getEncoder().encodeToString(signer.sign());
     }
 
+    /**
+     * Weryfikacja podpisu cyfrowego Ed25519.
+     */
     public boolean verify(String data, String signatureBase64, String signingPublicKeyBase64)
             throws Exception {
         byte[] keyBytes = Base64.getDecoder().decode(signingPublicKeyBase64);
@@ -183,18 +161,16 @@ public class E2eeService {
         return verifier.verify(Base64.getDecoder().decode(signatureBase64));
     }
 
-    // =========================================================
-    // Kodowanie klucza publicznego do Base64
-    // =========================================================
-
+    /**
+     * Kodowanie klucza do formatu Base64.
+     */
     public String encodeKey(Key key) {
         return Base64.getEncoder().encodeToString(key.getEncoded());
     }
 
-    // =========================================================
-    // PBKDF2 - klucz AES-256
-    // =========================================================
-
+    /**
+     * Wyprowadzanie klucza AES (KDF) z hasła i soli.
+     */
     private SecretKey deriveAesKey(String password, String saltBase64) throws Exception {
         byte[] salt = Base64.getDecoder().decode(saltBase64);
         PBEKeySpec spec = new PBEKeySpec(

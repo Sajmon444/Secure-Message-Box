@@ -7,16 +7,24 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.entity.SecretMessa
 
 import java.util.List;
 
+/**
+ * Repozytorium JPA obsługujące operacje na wiadomościach w systemie.
+ */
 public interface SecretMessageRepository extends JpaRepository<SecretMessage, Long> {
 
-    // Oryginalne metody (zostawione dla zgodności)
+    /**
+     * Pobiera listę wiadomości odebranych przez użytkownika, posortowaną od najnowszej.
+     */
     List<SecretMessage> findByReceiverIdOrderByCreatedAtDesc(Long receiverId);
+
+    /**
+     * Pobiera listę wiadomości wysłanych przez użytkownika, posortowaną od najnowszej.
+     */
     List<SecretMessage> findBySenderIdOrderByCreatedAtDesc(Long senderId);
 
     /**
-     * Skrzynka odbiorcza z JOIN FETCH — ładuje sender, receiver i category
-     * w jednym zapytaniu SQL, żeby uniknąć LazyInitializationException
-     * gdy Thymeleaf próbuje odczytać msg.sender.username poza sesją Hibernate.
+     * Pobiera zawartość skrzynki odbiorczej wraz z załadowanymi relacjami (nadawca, odbiorca, kategoria).
+     * Wykorzystuje JOIN FETCH w celu uniknięcia problemu LazyInitializationException.
      */
     @Query("SELECT m FROM SecretMessage m " +
             "JOIN FETCH m.sender " +

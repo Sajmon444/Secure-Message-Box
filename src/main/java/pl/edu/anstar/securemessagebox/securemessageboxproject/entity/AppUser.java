@@ -10,11 +10,8 @@ import java.util.List;
 
 /**
  * Encja użytkownika systemu SecureMessageBox.
- *
- * Nowe kolumny bezpieczeństwa (zarządzane przez DroolsSecurityService):
- *   - accountStatus  → ACTIVE (domyślny), BLOCKED, SUSPENDED
- *   - blockedUntil   → czas końca blokady (domyślnie +24h); NULL = konto aktywne
- *   - blockReason    → czytelny powód blokady generowany przez silnik reguł Drools
+ * Przechowuje dane uwierzytelniające, klucze kryptograficzne E2EE oraz status bezpieczeństwa konta,
+ * zarządzany automatycznie przez silnik reguł Drools.
  */
 @Entity
 @Table(name = "app_user")
@@ -36,58 +33,40 @@ public class AppUser {
 
     // ---- Klucze kryptograficzne E2EE ----
 
-    /** Klucz publiczny RSA — każdy może pobrać, by zaszyfrować wiadomość E2EE */
+    /** Klucz publiczny RSA (udostępniany publicznie). */
     @Column(name = "public_key", columnDefinition = "TEXT")
     private String publicKey;
 
-    /** Klucz prywatny RSA zaszyfrowany PBKDF2+AES-256-GCM (hasłem E2EE użytkownika) */
+    /** Klucz prywatny RSA (zaszyfrowany algorytmem AES-256-GCM). */
     @Column(name = "encrypted_private_key", columnDefinition = "TEXT")
     private String encryptedPrivateKey;
 
-    /** Klucz prywatny Ed25519 zaszyfrowany PBKDF2+AES-256-GCM (tym samym hasłem E2EE) */
+    /** Klucz prywatny Ed25519 (zaszyfrowany algorytmem AES-256-GCM). */
     @Column(name = "encrypted_signing_priv_key", columnDefinition = "TEXT")
     private String encryptedSigningPrivateKey;
 
-    /** Klucz publiczny Ed25519 — do weryfikacji podpisów wiadomości tego użytkownika */
+    /** Klucz publiczny Ed25519 do weryfikacji podpisów użytkownika. */
     @Column(name = "signing_public_key", columnDefinition = "TEXT")
     private String signingPublicKey;
 
-    /** Sól PBKDF2 — potrzebna do wyprowadzenia klucza AES z hasła E2EE */
+    /** Sól PBKDF2 używana przy wyprowadzaniu klucza AES. */
     @Column(name = "kdf_salt", length = 64)
     private String kdfSalt;
 
-    // ---- Nowe: status konta (zarządzany przez Drools) ----
+    // ---- Zarządzanie statusem konta (Drools) ----
 
-    /**
-     * Status konta użytkownika.
-     * Dopuszczalne wartości: ACTIVE, BLOCKED, SUSPENDED
-     *
-     * ACTIVE    → normalna praca
-     * BLOCKED   → zablokowane przez Drools (brute-force, nocne logowanie, eskalacja alertów)
-     *             Blokada trwa domyślnie 24h (do pola blockedUntil).
-     *             Użytkownik NIE może się zalogować ani ODBIERAĆ wiadomości.
-     * SUSPENDED → manualna blokada przez admina (bez daty wygaśnięcia)
+    /** * Status konta użytkownika (ACTIVE, BLOCKED, SUSPENDED).
      */
     @Column(name = "account_status", nullable = false, length = 20)
     private String accountStatus = "ACTIVE";
 
-    /**
-     * Czas wygaśnięcia blokady.
-     * NULL gdy konto ma status ACTIVE lub SUSPENDED (bezterminowe).
-     * Drools ustawia to pole na NOW() + 24h przy każdej automatycznej blokadzie.
-     * Funkcja fn_unblock_expired_accounts() (lub scheduler Spring) czyści
-     * blokady po upływie tego czasu.
+    /** * Data wygaśnięcia blokady (dla statusu BLOCKED).
+     * Wartość NULL oznacza brak ograniczenia czasowego.
      */
     @Column(name = "blocked_until")
     private LocalDateTime blockedUntil;
 
-    /**
-     * Czytelny powód blokady konta — generowany przez regułę Drools.
-     * Przykłady:
-     *   "BRUTE_FORCE: 6 nieudanych logowań w 3 minuty (2025-06-01 03:14)"
-     *   "LOGIN_AFTER_HOURS_HIGH: próba logowania o 03:14 — poza dopuszczonymi godzinami"
-     *   "ESCALATION: 5 alertów LOW w 10 min — automatyczna eskalacja do HIGH"
-     */
+    /** Opisowy powód blokady wygenerowany przez system. */
     @Column(name = "block_reason", columnDefinition = "TEXT")
     private String blockReason;
 
@@ -105,19 +84,18 @@ public class AppUser {
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     private List<UserSession> sessions;
 
-    // ---- Metody pomocnicze ----
-
-    /** Zwraca true jeśli konto jest aktualnie zablokowane (uwzględnia czas wygaśnięcia). */
+    /**
+     * Weryfikuje, czy konto jest aktualnie zablokowane.
+     * Uwzględnia zarówno status konta, jak i termin wygaśnięcia blokady.
+     */
     @Transient
     public boolean isCurrentlyBlocked() {
         if (!"BLOCKED".equals(accountStatus) && !"SUSPENDED".equals(accountStatus)) {
             return false;
         }
-        // Blokada BLOCKED z terminem — sprawdź czy jeszcze trwa
         if ("BLOCKED".equals(accountStatus) && blockedUntil != null) {
             return LocalDateTime.now().isBefore(blockedUntil);
         }
-        // BLOCKED bez terminu lub SUSPENDED — zablokowany bezterminowo
         return true;
     }
 }

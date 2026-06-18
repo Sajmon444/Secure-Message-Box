@@ -31,11 +31,11 @@ import org.springframework.transaction.annotation.Propagation;
  * Główny serwis integrujący Drools z logiką bezpieczeństwa aplikacji.
  *
  * Odpowiada za:
- *   1. evaluateLoginAttempt()  → analiza brute-force i pora dnia
- *   2. scanMessageContent()    → DLP dla wiadomości STANDARD
- *   3. checkEscalation()       → agregacja alertów i eskalacja do HIGH
- *   4. blockAccount()          → zapis blokady w bazie + unieważnienie sesji
- *   5. invalidateAllSessions() → wylogowanie przez Spring SessionRegistry
+ *   1. evaluateLoginAttempt()  - analiza brute-force i pora dnia
+ *   2. scanMessageContent()    - DLP dla wiadomości STANDARD
+ *   3. checkEscalation()       - agregacja alertów i eskalacja do HIGH
+ *   4. blockAccount()          - zapis blokady w bazie + unieważnienie sesji
+ *   5. invalidateAllSessions() - wylogowanie przez Spring SessionRegistry
  *
  * Każde wywołanie Drools:
  *   - tworzy nową KieSession (stateless per-request)
@@ -125,17 +125,6 @@ public class DroolsSecurityService {
     /**
      * Skanuje treść wiadomości STANDARD pod kątem wycieku danych (DLP).
      *
-     * UWAGA: Metoda NIGDY nie powinna być wywoływana dla wiadomości
-     * kategorii END_TO_END_ENCRYPTED. Sprawdzenie leży po stronie wywołującego
-     * (MessageService) — tutaj dodatkowa weryfikacja jako zabezpieczenie.
-     *
-     * @param senderId        ID nadawcy
-     * @param senderUsername  nazwa nadawcy
-     * @param receiverId      ID odbiorcy
-     * @param plainText       odszyfrowana treść w pamięci RAM (nigdy nie zapisywana do bazy)
-     * @return MessageScanRequest po odpaleniu reguł:
-     *         blocked=false → wiadomość może być wysłana
-     *         blocked=true  → wysyłka zablokowana, blockReason zawiera komunikat dla użytkownika
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public MessageScanRequest scanMessageContent(Long senderId, String senderUsername,

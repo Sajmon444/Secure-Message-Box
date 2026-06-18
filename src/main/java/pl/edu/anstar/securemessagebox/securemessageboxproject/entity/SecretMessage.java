@@ -1,5 +1,3 @@
-// src/main/java/pl/edu/anstar/securemessagebox/securemessageboxproject/entity/SecretMessage.java
-
 package pl.edu.anstar.securemessagebox.securemessageboxproject.entity;
 
 import jakarta.persistence.*;
@@ -9,6 +7,11 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
+/**
+ * Encja reprezentująca zaszyfrowaną wiadomość w systemie.
+ * Przechowuje zarówno wiadomości typu STANDARD, jak i END_TO_END_ENCRYPTED,
+ * wraz z niezbędnymi metadanymi kryptograficznymi.
+ */
 @Entity
 @Table(name = "secret_message")
 @Data
@@ -33,23 +36,22 @@ public class SecretMessage {
     @JoinColumn(name = "category_id", nullable = false, foreignKey = @ForeignKey(name = "fk_message_category"))
     private MessageCategory category;
 
+    /** Zaszyfrowana treść wiadomości. */
     @Column(name = "encrypted_content", nullable = false, columnDefinition = "TEXT")
     private String encryptedContent;
 
-    // Wektor inicjalizacyjny AES (dla STANDARD) lub "E2EE_NO_IV" (dla E2EE)
+    /** Wektor inicjalizacyjny AES (dla STANDARD) lub flaga "E2EE_NO_IV" (dla E2EE). */
     @Column(name = "secret_iv", nullable = false, length = 64)
     private String secretIv;
 
     /**
-     * Losowa sól PBKDF2 dla wiadomości STANDARD (Base64, 16 bajtów).
-     * Wartość 'E2EE_NO_SALT' dla wiadomości END_TO_END_ENCRYPTED (RSA nie używa PBKDF2).
-     * Przechowywanie jawne jest BEZPIECZNE — tajność soli nie jest wymagana,
-     * siłę zapewniają iteracje PBKDF2 + unikalność soli per wiadomość.
+     * Sól PBKDF2 dla wiadomości STANDARD lub flaga "E2EE_NO_SALT" dla E2EE.
+     * Sól jest jawna, zapewniając unikalność kluczy dla algorytmu PBKDF2.
      */
     @Column(name = "secret_salt", nullable = false, length = 64)
     private String secretSalt;
 
-    // Podpis cyfrowy Ed25519 wiadomości (Base64) — tylko dla kategorii END_TO_END_ENCRYPTED.
+    /** Podpis cyfrowy Ed25519 (tylko dla kategorii END_TO_END_ENCRYPTED). */
     @Column(name = "digital_signature", columnDefinition = "TEXT")
     private String digitalSignature;
 

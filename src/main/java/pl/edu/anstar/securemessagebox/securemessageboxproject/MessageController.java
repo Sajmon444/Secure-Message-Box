@@ -8,6 +8,9 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
+/**
+ * Kontroler obsługujący żądania związane z wysyłaniem, odbieraniem oraz deszyfrowaniem wiadomości.
+ */
 @Controller
 @RequestMapping("/messages")
 public class MessageController {
@@ -19,20 +22,24 @@ public class MessageController {
         this.messageService = messageService;
     }
 
+    /**
+     * Wyświetlenie formularza wysyłania wiadomości.
+     */
     @GetMapping("/send")
     public String sendPage(@AuthenticationPrincipal UserDetails user) {
         if (user == null) return "redirect:/login";
         return "send";
     }
 
+    /**
+     * Przetworzenie formularza wysyłki wiadomości.
+     */
     @PostMapping("/send")
     public String sendSubmit(@AuthenticationPrincipal UserDetails user,
                              @RequestParam("receiverUsername") String receiverUsername,
                              @RequestParam("category")         String category,
                              @RequestParam("content")          String content,
-                             // Hasło dla kategorii STANDARD (AES)
                              @RequestParam(value = "msgPassword",  required = false, defaultValue = "") String msgPassword,
-                             // Hasło E2EE — INNE niż hasło logowania, tylko dla E2EE
                              @RequestParam(value = "e2eePassword", required = false, defaultValue = "") String e2eePassword,
                              Model model) {
 
@@ -52,6 +59,9 @@ public class MessageController {
         return "send";
     }
 
+    /**
+     * Pobranie i wyświetlenie skrzynki odbiorczej zalogowanego użytkownika.
+     */
     @GetMapping("/inbox")
     public String inboxPage(@AuthenticationPrincipal UserDetails user, Model model) {
         if (user == null) return "redirect:/login";
@@ -59,6 +69,9 @@ public class MessageController {
         return "inbox";
     }
 
+    /**
+     * Wykonanie procesu deszyfrowania wybranej wiadomości.
+     */
     @PostMapping("/decrypt/{id}")
     public String decrypt(@PathVariable("id") Long id,
                           @RequestParam("msgPassword") String msgPassword,

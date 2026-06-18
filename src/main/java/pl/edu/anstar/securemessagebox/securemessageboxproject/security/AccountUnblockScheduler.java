@@ -12,6 +12,10 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.AppUser
 
 import java.time.LocalDateTime;
 
+/**
+ * Komponent odpowiedzialny za automatyczne odblokowywanie kont użytkowników,
+ * których czas blokady uległ przedawnieniu.
+ */
 @Component
 @RequiredArgsConstructor
 public class AccountUnblockScheduler {
@@ -19,7 +23,9 @@ public class AccountUnblockScheduler {
     private static final Logger log = LoggerFactory.getLogger(AccountUnblockScheduler.class);
     private final AppUserRepository appUserRepository;
 
-    // 1. Sprawdzanie i odblokowywanie NATYCHMIAST po uruchomieniu aplikacji
+    /**
+     * Inicjalizuje proces odblokowywania kont natychmiast po starcie aplikacji.
+     */
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void unblockOnStartup() {
@@ -27,11 +33,13 @@ public class AccountUnblockScheduler {
         unblockExpiredAccounts();
     }
 
-    // 2. Cykliczne sprawdzanie (co 60 minut)
+    /**
+     * Cyklicznie (co 60 minut) sprawdza bazę danych i odblokowuje konta
+     * z wygasłym terminem blokady.
+     */
     @Scheduled(fixedDelayString = "PT60M")
     @Transactional
     public void unblockExpiredAccounts() {
-        // Wywołujemy zaktualizowaną metodę wywołującą funkcję SQL
         int count = appUserRepository.unblockExpiredAccounts();
 
         if (count > 0) {

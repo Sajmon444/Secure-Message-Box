@@ -18,14 +18,7 @@ import org.springframework.security.web.session.HttpSessionEventPublisher;
 import pl.edu.anstar.securemessagebox.securemessageboxproject.security.CustomAuthFailureHandler;
 
 /**
- * Konfiguracja Spring Security.
- *
- * Zmiany:
- * 1. SessionRegistry do zarządzania aktywnymi sesjami.
- * 2. Maksymalnie 1 sesja na użytkownika.
- * 3. CustomAuthFailureHandler obsługujący różne błędy logowania
- *    (np. konto zablokowane).
- * 4. HttpSessionEventPublisher wymagany przez SessionRegistry.
+ * Konfiguracja zabezpieczeń aplikacji w oparciu o Spring Security.
  */
 @Configuration
 @EnableWebSecurity
@@ -37,16 +30,21 @@ public class SecurityConfig {
     public SecurityConfig(
             AppUserDetailsService appUserDetailsService,
             CustomAuthFailureHandler customAuthFailureHandler) {
-
         this.appUserDetailsService = appUserDetailsService;
         this.customAuthFailureHandler = customAuthFailureHandler;
     }
 
+    /**
+     * Definicja mechanizmu szyfrowania haseł (BCrypt).
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Konfiguracja dostawcy uwierzytelniania w oparciu o serwis użytkowników.
+     */
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider =
@@ -55,6 +53,9 @@ public class SecurityConfig {
         return provider;
     }
 
+    /**
+     * Udostępnienie menedżera uwierzytelniania dla kontenera Springa.
+     */
     @Bean
     public AuthenticationManager authenticationManager(
             AuthenticationConfiguration config) throws Exception {
@@ -62,7 +63,7 @@ public class SecurityConfig {
     }
 
     /**
-     * Rejestr aktywnych sesji.
+     * Inicjalizacja rejestru sesji do śledzenia aktywnych użytkowników.
      */
     @Bean
     public SessionRegistry sessionRegistry() {
@@ -70,18 +71,24 @@ public class SecurityConfig {
     }
 
     /**
-     * Publikuje zdarzenia tworzenia/usuwania sesji.
+     * Rejestracja publikatora zdarzeń sesji HTTP.
      */
     @Bean
     public HttpSessionEventPublisher httpSessionEventPublisher() {
         return new HttpSessionEventPublisher();
     }
 
+    /**
+     * Definicja strategii zarządzania sesją podczas procesu uwierzytelniania.
+     */
     @Bean
     public SessionAuthenticationStrategy sessionAuthenticationStrategy() {
         return new RegisterSessionAuthenticationStrategy(sessionRegistry());
     }
 
+    /**
+     * Konfiguracja łańcucha filtrów bezpieczeństwa dla żądań HTTP.
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 

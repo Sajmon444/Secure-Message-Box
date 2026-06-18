@@ -11,6 +11,9 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.UserSes
 
 import java.time.LocalDateTime;
 
+/**
+ * Komponent nasłuchujący zdarzeń unieważnienia sesji HTTP w celu aktualizacji statusu w bazie danych.
+ */
 @Component
 @RequiredArgsConstructor
 public class SessionDestroyedListener {
@@ -18,13 +21,16 @@ public class SessionDestroyedListener {
     private static final Logger log = LoggerFactory.getLogger(SessionDestroyedListener.class);
     private final UserSessionRepository userSessionRepository;
 
+    /**
+     * Obsługa zdarzenia zakończenia sesji poprzez aktualizację stanu w repozytorium sesji użytkownika.
+     */
     @EventListener
     @Transactional
     public void onSessionDestroyed(HttpSessionDestroyedEvent event) {
         String sessionId = event.getId();
 
         userSessionRepository.findBySessionToken(sessionId).ifPresent(session -> {
-            // Unikamy nadpisywania, jeśli sesja została już unieważniona przez Drools z powodu alertu HIGH
+            // Weryfikacja statusu sesji w celu uniknięcia nadpisywania rekordów unieważnionych przez Drools
             if (session.getIsActive()) {
                 session.setIsActive(false);
                 session.setLogoutTime(LocalDateTime.now());

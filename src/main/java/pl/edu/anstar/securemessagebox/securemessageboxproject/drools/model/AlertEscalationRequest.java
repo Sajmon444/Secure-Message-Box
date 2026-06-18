@@ -10,12 +10,12 @@ import lombok.NoArgsConstructor;
  * zawiera aktualne liczniki alertów z ostatnich 10 minut dla danego użytkownika.
  *
  * Reguły eskalacji:
- *   1. 3× LOW + 1× MEDIUM w ciągu 10 min → ESCALATION_AGGREGATED (HIGH) + blokada
- *   2. 5× LOW w ciągu 10 min              → ESCALATION_AGGREGATED (HIGH) + blokada
+ *   1. 3× LOW + 1x MEDIUM w ciągu 10 min - ESCALATION_AGGREGATED (HIGH) + blokada
+ *   2. 5× LOW w ciągu 10 min              - ESCALATION_AGGREGATED (HIGH) + blokada
  *
  * Po odpaleniu reguły:
- *   shouldEscalate=true  → DroolsSecurityService blokuje konto i unieważnia sesje
- *   shouldEscalate=false → brak akcji
+ *   shouldEscalate=true  - DroolsSecurityService blokuje konto i unieważnia sesje
+ *   shouldEscalate=false - brak akcji
  */
 @Data
 @NoArgsConstructor

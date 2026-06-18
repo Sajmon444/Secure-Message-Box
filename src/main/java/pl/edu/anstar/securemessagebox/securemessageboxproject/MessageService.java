@@ -17,6 +17,9 @@ import pl.edu.anstar.securemessagebox.securemessageboxproject.repository.SecretM
 import java.security.PrivateKey;
 import java.util.List;
 
+/**
+ * Serwis obsługujący operacje na wiadomościach: wysyłanie, odbiór oraz deszyfrowanie.
+ */
 @Service
 @RequiredArgsConstructor
 public class MessageService {
@@ -28,18 +31,16 @@ public class MessageService {
     private final MessageCategoryRepository categoryRepository;
     private final SecretMessageRepository messageRepository;
     private final EncryptionService encryptionService;
-    private final E2eeService e2eeService; // Dodano brakujący serwis E2EE
+    private final E2eeService e2eeService;
 
-    // =================================================================================
-    // REKORD POMOCNICZY
-    // =================================================================================
-
+    /**
+     * Rekord przechowujący wynik operacji deszyfrowania wiadomości.
+     */
     public record DecryptResult(String plainText, boolean signaturePresent, boolean signatureValid) {}
 
-    // =================================================================================
-    // WYSYŁANIE WIADOMOŚCI (Integracja E2EE + Drools DLP)
-    // =================================================================================
-
+    /**
+     * Implementacja procesu wysyłki wiadomości z integracją zabezpieczeń E2EE oraz DLP.
+     */
     @Transactional
     public void sendMessage(String senderUsername, String receiverUsername, String categoryName,
                             String plainText, String msgPassword, String e2eePassword) throws Exception {
@@ -50,19 +51,19 @@ public class MessageService {
         AppUser receiver = appUserRepository.findByUsername(receiverUsername)
                 .orElseThrow(() -> new IllegalArgumentException("Odbiorca nie istnieje: " + receiverUsername));
 
-        // ---- 1. Sprawdź blokadę nadawcy ----
+        // Weryfikacja blokady konta nadawcy
         if (droolsSecurityService.isAccountBlocked(sender)) {
             log.warn("[MESSAGE] Nadawca '{}' ma zablokowane konto — wysyłka odrzucona.", senderUsername);
             throw new IllegalArgumentException("Twoje konto jest tymczasowo zablokowane. Wysyłanie wiadomości jest niemożliwe.");
         }
 
-        // ---- 2. Sprawdź blokadę odbiorcy ----
+        // Weryfikacja blokady konta odbiorcy
         if (droolsSecurityService.isAccountBlocked(receiver)) {
             log.info("[MESSAGE] Odbiorca '{}' ma zablokowane konto — wysyłka odrzucona.", receiverUsername);
             throw new IllegalArgumentException("Nie można wysłać wiadomości do użytkownika '" + receiverUsername + "' — konto odbiorcy jest tymczasowo niedostępne ze względów bezpieczeństwa.");
         }
 
-        // ---- 3. DLP — tylko dla wiadomości STANDARD (AES) ----
+        // Kontrola bezpieczeństwa treści (DLP) dla wiadomości standardowych
         if ("STANDARD".equals(categoryName)) {
             MessageScanRequest scan = droolsSecurityService.scanMessageContent(
                     sender.getId(), senderUsername, receiver.getId(), plainText);
@@ -70,42 +71,40 @@ public class MessageService {
             if (scan.isBlocked()) {
                 log.warn("[DLP] Wiadomość od '{}' do '{}' zablokowana przez DLP: {}",
                         senderUsername, receiverUsername, scan.getAlertType());
-                // Zmieniono na rzucenie wyjątku, aby Controller mógł to przechwycić w bloku catch
                 throw new IllegalArgumentException(scan.getBlockReason());
             }
         }
 
-        // ---- 4. Szyfrowanie (AES lub RSA+Ed25519) ----
         MessageCategory category = categoryRepository.findByCategoryName(categoryName)
                 .orElseThrow(() -> new IllegalArgumentException("Nieznana kategoria: " + categoryName));
 
         String iv, salt, encryptedContent, digitalSignature = null;
 
+        // Implementacja szyfrowania dla kategorii STANDARD (AES) lub E2EE (RSA + Ed25519)
         if ("STANDARD".equals(categoryName)) {
             iv = encryptionService.generateIv();
             salt = encryptionService.generateSalt();
             encryptedContent = encryptionService.encryptWithIv(plainText, msgPassword, iv, salt);
         } else {
-            // Logika dla END_TO_END_ENCRYPTED
             if (e2eePassword == null || e2eePassword.isBlank()) {
                 throw new IllegalArgumentException("Wymagane hasło E2EE do wysłania wiadomości poufnej.");
             }
 
-            // 4a. Odszyfrowanie klucza prywatnego nadawcy w celu złożenia podpisu
+            // Odszyfrowanie klucza prywatnego nadawcy dla podpisu
             PrivateKey signingPrivKey = e2eeService.decryptEd25519PrivateKey(
                     sender.getEncryptedSigningPrivateKey(), e2eePassword, sender.getKdfSalt());
 
-            // 4b. Szyfrowanie treści kluczem publicznym odbiorcy
+            // Szyfrowanie treści kluczem publicznym odbiorcy
             encryptedContent = e2eeService.rsaEncrypt(plainText, receiver.getPublicKey());
 
-            // 4c. Wygenerowanie podpisu cyfrowego Ed25519 z jawnej treści
+            // Podpisanie wiadomości cyfrowo
             digitalSignature = e2eeService.sign(plainText, signingPrivKey);
 
             iv = "E2EE_NO_IV";
             salt = "E2EE_NO_SALT";
         }
 
-        // ---- 5. Zapis w bazie ----
+        // Utrwalenie wiadomości w bazie danych
         SecretMessage message = new SecretMessage();
         message.setSender(sender);
         message.setReceiver(receiver);
@@ -121,10 +120,9 @@ public class MessageService {
                 senderUsername, receiverUsername, categoryName);
     }
 
-    // =================================================================================
-    // SKRZYNKA ODBIORCZA I DESZYFROWANIE
-    // =================================================================================
-
+    /**
+     * Pobieranie skrzynki odbiorczej użytkownika.
+     */
     @Transactional(readOnly = true)
     public List<SecretMessage> getInbox(String username) {
         AppUser receiver = appUserRepository.findByUsername(username)
@@ -132,6 +130,9 @@ public class MessageService {
         return messageRepository.findInboxWithDetails(receiver.getId());
     }
 
+    /**
+     * Deszyfrowanie wiadomości w zależności od jej kategorii.
+     */
     @Transactional
     public DecryptResult decryptMessage(Long messageId, String password) throws Exception {
         SecretMessage msg = messageRepository.findById(messageId)
@@ -140,24 +141,24 @@ public class MessageService {
         String categoryName = msg.getCategory().getCategoryName();
 
         if ("STANDARD".equals(categoryName)) {
-            // Odszyfrowanie AES
+            // Odszyfrowanie przy użyciu algorytmu AES
             String plainText = encryptionService.decrypt(
                     msg.getEncryptedContent(), password, msg.getSecretIv(), msg.getSecretSalt());
             return new DecryptResult(plainText, false, false);
 
         } else {
-            // Odszyfrowanie E2EE (RSA)
+            // Odszyfrowanie przy użyciu algorytmu RSA i weryfikacja podpisu Ed25519
             AppUser receiver = msg.getReceiver();
             AppUser sender = msg.getSender();
 
-            // 1. Odszyfrowanie klucza prywatnego RSA odbiorcy hasłem E2EE
+            // Odszyfrowanie klucza prywatnego RSA odbiorcy
             PrivateKey rsaPrivKey = e2eeService.decryptRsaPrivateKey(
                     receiver.getEncryptedPrivateKey(), password, receiver.getKdfSalt());
 
-            // 2. Odszyfrowanie treści wiadomości
+            // Odszyfrowanie treści wiadomości
             String plainText = e2eeService.rsaDecrypt(msg.getEncryptedContent(), rsaPrivKey);
 
-            // 3. Weryfikacja podpisu nadawcy (Ed25519)
+            // Weryfikacja podpisu cyfrowego nadawcy
             boolean signaturePresent = msg.getDigitalSignature() != null;
             boolean signatureValid = false;
 

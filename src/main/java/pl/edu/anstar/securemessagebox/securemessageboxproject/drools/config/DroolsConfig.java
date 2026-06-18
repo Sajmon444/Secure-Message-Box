@@ -13,11 +13,11 @@ import org.springframework.context.annotation.Configuration;
  * Konfiguracja silnika Drools.
  *
  * Ładuje zestaw zmodularyzowanych plików reguł z zasobów aplikacji:
- * 1. rules/test-rule.drl        → testowy fakt DroolsTestFact (weryfikacja startu)
- * 2. rules/brute-force-rules.drl → detekcja ataków brute-force (blokowanie kont)
- * 3. rules/session-rules.drl     → dynamiczna ocena ryzyka sesji na podstawie pory dnia
- * 4. rules/dlp-rules.drl         → Data Loss Prevention (skanowanie wiadomości STANDARD)
- * 5. rules/escalation-rules.drl  → agregacja i automatyczna eskalacja alertów niskiego ryzyka
+ * 1. rules/test-rule.drl        - testowy fakt DroolsTestFact (weryfikacja startu)
+ * 2. rules/brute-force-rules.drl - detekcja ataków brute-force (blokowanie kont)
+ * 3. rules/session-rules.drl     - dynamiczna ocena ryzyka sesji na podstawie pory dnia
+ * 4. rules/dlp-rules.drl         - Data Loss Prevention (skanowanie wiadomości STANDARD)
+ * 5. rules/escalation-rules.drl  - agregacja i automatyczna eskalacja alertów niskiego ryzyka
  *
  * Silnik Drools kompiluje wszystkie pliki współdzielące ten sam pakiet w jedną,
  * spójną bazę wiedzy. Priorytety (salience) działają globalnie pomiędzy plikami.

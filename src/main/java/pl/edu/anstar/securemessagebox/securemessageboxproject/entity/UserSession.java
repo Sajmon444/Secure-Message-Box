@@ -9,24 +9,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * Sesja użytkownika — audyt i unieważnianie sesji przez Drools.
- *
- * Rola tabeli:
- *   Przechowuje identyfikatory sesji Spring Security (HttpSession.getId()),
- *   dzięki czemu DroolsSecurityService może wymusić natychmiastowe wylogowanie
- *   użytkownika przez unieważnienie wszystkich jego aktywnych sesji w SessionRegistry.
- *
- * Cykl życia rekordu:
- *   LOGIN  → INSERT: is_active=TRUE, logout_time=NULL, invalidation_reason=NULL
- *   LOGOUT → UPDATE: is_active=FALSE, logout_time=NOW(), invalidation_reason=NULL
- *   BLOCK  → UPDATE: is_active=FALSE, logout_time=NOW(),
- *             invalidation_reason=<kod z Drools> dla WSZYSTKICH aktywnych sesji użytkownika
- *
- * Integracja ze Spring Security:
- *   SessionRegistryIntegrationService.recordLogin()  → INSERT
- *   SessionRegistryIntegrationService.recordLogout() → UPDATE
- *   DroolsSecurityService.invalidateAllSessions()    → UPDATE + wywołanie
- *                                                       SessionRegistry.removeSessionInformation()
+ * Encja reprezentująca sesję użytkownika, wykorzystywana do celów audytowych
+ * oraz zarządzania bezpieczeństwem poprzez wymuszone unieważnianie sesji (integracja z Drools).
  */
 @Entity
 @Table(name = "user_session")
@@ -45,8 +29,8 @@ public class UserSession {
     private AppUser user;
 
     /**
-     * Identyfikator sesji Spring Security: HttpSession.getId()
-     * Używany do lokalizacji sesji w SessionRegistry i jej unieważnienia.
+     * Identyfikator sesji Spring Security (HttpSession.getId()).
+     * Umożliwia lokalizację i unieważnienie sesji w SessionRegistry.
      */
     @Column(name = "session_token", unique = true, nullable = false, length = 255)
     private String sessionToken;
@@ -55,28 +39,23 @@ public class UserSession {
     @Column(name = "login_time", nullable = false, updatable = false)
     private LocalDateTime loginTime;
 
-    /** Czas wylogowania (normalnego lub wymuszonego przez Drools). NULL = sesja aktywna. */
+    /** Czas zakończenia sesji. Wartość NULL oznacza, że sesja pozostaje aktywna. */
     @Column(name = "logout_time")
     private LocalDateTime logoutTime;
 
-    /** Adres IP z którego nastąpiło logowanie (IPv4 lub IPv6, max 45 znaków). */
+    /** Adres IP użytkownika (obsługuje IPv4 oraz IPv6). */
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
-    /** Nagłówek User-Agent przeglądarki — do celów audytowych. */
+    /** Informacje o przeglądarce użytkownika (User-Agent). */
     @Column(name = "user_agent", length = 512)
     private String userAgent;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
-    /**
-     * Powód unieważnienia sesji — wypełniany przez Drools przy HIGH alert.
-     * NULL = normalne wylogowanie przez użytkownika.
-     * Przykładowe wartości:
-     *   'SECURITY_BLOCK_BRUTE_FORCE'
-     *   'SECURITY_BLOCK_NIGHT_LOGIN'
-     *   'SECURITY_BLOCK_ESCALATION'
+    /** * Powód unieważnienia sesji (np. zablokowanie przez reguły Drools).
+     * Wartość NULL oznacza poprawne wylogowanie przez użytkownika.
      */
     @Column(name = "invalidation_reason", length = 100)
     private String invalidationReason;

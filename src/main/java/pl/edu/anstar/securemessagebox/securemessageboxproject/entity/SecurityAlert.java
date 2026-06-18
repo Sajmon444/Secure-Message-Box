@@ -9,25 +9,9 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * Alert bezpieczeństwa generowany przez silnik reguł Drools.
- *
- * Poziomy ważności (severity_level):
- *   LOW    → zdarzenie monitorowane, brak natychmiastowej akcji
- *   MEDIUM → wiadomość zablokowana lub podejrzane zachowanie
- *   HIGH   → konto zablokowane, wszystkie sesje unieważnione
- *
- * Typy alertów (alert_type) — zamknięty katalog zgodny z CHECK w SQL:
- *   Logowanie:
- *     BRUTE_FORCE             → >5 błędnych prób logowania w 3 min
- *     LOGIN_AFTER_HOURS_LOW   → logowanie w godzinach 17:00–00:00
- *     LOGIN_AFTER_HOURS_HIGH  → logowanie w godzinach 00:00–07:00
- *   DLP (tylko wiadomości STANDARD / AES):
- *     DLP_SENSITIVE_KEYWORD   → słowo kluczowe: pesel, hasło, karta kredytowa, pin
- *     DLP_PESEL_PATTERN       → ciąg dokładnie 11 cyfr
- *     DLP_CARD_PATTERN        → ciąg dokładnie 16 cyfr
- *     DLP_LINK_DETECTED       → link (http/https/www) w treści
- *   Eskalacja:
- *     ESCALATION_AGGREGATED   → agregacja LOW/MEDIUM → automatyczny HIGH + blokada
+ * Encja reprezentująca alert bezpieczeństwa wygenerowany przez silnik reguł Drools.
+ * Przechowuje informacje o incydentach, ich dotkliwości oraz typie, umożliwiając
+ * audyt i automatyczną reakcję systemu na zagrożenia.
  */
 @Entity
 @Table(name = "security_alert")
@@ -46,20 +30,20 @@ public class SecurityAlert {
     private AppUser user;
 
     /**
-     * Poziom ważności: LOW | MEDIUM | HIGH
+     * Poziom ważności alertu (LOW, MEDIUM, HIGH).
+     * Określa stopień zagrożenia i wymaganą reakcję systemu.
      */
     @Column(name = "severity_level", nullable = false, length = 10)
     private String severityLevel;
 
     /**
-     * Typ zdarzenia — stały katalog, musi być jedną z wartości zdefiniowanych
-     * w CHECK constraint tabeli security_alert.
-     * Używany przez Drools do eskalacji (liczymy po typach).
+     * Typ zdarzenia, ściśle powiązany z ograniczeniami bazy danych (CHECK constraint).
+     * Wykorzystywany przez reguły Drools do identyfikacji i eskalacji zagrożeń.
      */
     @Column(name = "alert_type", nullable = false, length = 50)
     private String alertType;
 
-    /** Czytelny opis zdarzenia (generowany przez regułę Drools) */
+    /** Szczegółowy opis incydentu wygenerowany przez silnik reguł. */
     @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 

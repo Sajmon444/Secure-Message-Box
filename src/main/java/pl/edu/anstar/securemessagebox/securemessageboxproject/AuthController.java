@@ -39,32 +39,38 @@ public class AuthController {
         this.authService = authService;
     }
 
+    /**
+     * Wyświetlenie formularza logowania z obsługą komunikatów błędów.
+     */
     @GetMapping("/login")
     public String showLoginForm(
             @RequestParam(value = "error", required = false) String error,
             @RequestParam(value = "locked", required = false) Boolean locked,
             Model model) {
 
-        // Przypadek 1: Adres to /login?locked=true
+        // Obsługa blokady konta
         if (locked != null && locked) {
             model.addAttribute("errorMessage", "Konto zostało zablokowane ze względów bezpieczeństwa. Spróbuj ponownie później.");
         }
-        // Przypadek 2: Adres to /login?error (standardowy błędny login/hasło)
+        // Obsługa błędnych danych uwierzytelniających
         else if (error != null) {
             model.addAttribute("errorMessage", "Nieprawidłowa nazwa użytkownika lub hasło.");
         }
 
-        // Jeśli żaden parametr nie występuje, errorMessage nie zostanie dodany,
-        // a użytkownik zobaczy czysty formularz logowania.
-
         return "login";
     }
 
+    /**
+     * Wyświetlenie strony rejestracji użytkownika.
+     */
     @GetMapping("/register")
     public String registerPage() {
         return "register";
     }
 
+    /**
+     * Przetworzenie formularza rejestracji i generowanie infrastruktury kluczy.
+     */
     @PostMapping("/register")
     public String registerSubmit(
             @RequestParam("username") String username,
@@ -75,6 +81,7 @@ public class AuthController {
         try {
             String kdfSalt = authService.register(username, password, e2eePassword);
 
+            // Weryfikacja dostępności nazwy użytkownika
             if (kdfSalt == null) {
                 model.addAttribute("errorMsg", "Nazwa użytkownika jest już zajęta.");
                 return "register";
@@ -92,12 +99,18 @@ public class AuthController {
         }
     }
 
+    /**
+     * Wyświetlenie panelu głównego (dashboard) po poprawnym uwierzytelnieniu.
+     */
     @GetMapping("/dashboard")
     public String dashboard(@AuthenticationPrincipal UserDetails userDetails, Model model) {
         model.addAttribute("username", userDetails.getUsername());
         return "dashboard";
     }
 
+    /**
+     * Przekierowanie strony głównej na formularz logowania.
+     */
     @GetMapping("/")
     public String root() {
         return "redirect:/login";

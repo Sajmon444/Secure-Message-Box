@@ -28,16 +28,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Listener zdarzeń Spring Security — most między Spring a Drools.
- *
- * Nasłuchuje na:
- *   AuthenticationSuccessEvent    → udane logowanie
- *   AbstractAuthenticationFailureEvent → nieudane logowanie
- *
- * Przy każdym zdarzeniu:
- *   1. Pobiera z bazy liczbę nieudanych prób z ostatnich 3 minut
- *   2. Wywołuje DroolsSecurityService.evaluateLoginAttempt()
- *   3. Przy udanym logowaniu — rejestruje nową sesję w user_session
+ * Komponent nasłuchujący zdarzeń Spring Security w celu integracji z silnikiem reguł Drools
+ * oraz zarządzania sesjami użytkowników.
  */
 @Component
 @RequiredArgsConstructor
@@ -49,9 +41,12 @@ public class LoginAttemptListener {
     private final UserSessionRepository userSessionRepository;
     private final SecurityAlertRepository securityAlertRepository;
 
-    // Pamięć podręczna do śledzenia nieudanych logowań w pamięci (zastępuje problematyczne odpytywanie bazy)
+    // Lokalna pamięć podręczna do śledzenia nieudanych prób logowania
     private final Map<String, List<LocalDateTime>> failedAttempts = new ConcurrentHashMap<>();
 
+    /**
+     * Obsługa udanego logowania: weryfikacja bezpieczeństwa przez Drools i rejestracja sesji.
+     */
     @EventListener
     public void onSuccess(AuthenticationSuccessEvent event) {
         String username = extractUsername(event.getAuthentication().getPrincipal());
@@ -60,19 +55,22 @@ public class LoginAttemptListener {
         if (user == null) return;
 
         String ip = getClientIp();
-        failedAttempts.remove(username); // Resetujemy błędy po udanym zalogowaniu
+        failedAttempts.remove(username); // Resetowanie licznika błędów po sukcesie
 
         LoginAttempt attempt = droolsSecurityService.evaluateLoginAttempt(user.getId(), username, false, ip, 0);
 
-        // Jeśli Drools zablokował konto podczas poprawnego logowania (np. logowanie nocne)
+        // Natychmiastowe przerwanie sesji w przypadku wykrycia blokady przez reguły
         if ("BLOCK".equals(attempt.getActionRequired())) {
-            forceLogoutImmediately(); // Niszczymy sesję, użytkownik nie przejdzie dalej
+            forceLogoutImmediately();
             return;
         }
 
         registerSession(user, ip);
     }
 
+    /**
+     * Obsługa nieudanego logowania: aktualizacja licznika prób i ocena bezpieczeństwa przez Drools.
+     */
     @EventListener
     public void onFailure(AbstractAuthenticationFailureEvent event) {
         String username = extractUsername(event.getAuthentication().getPrincipal());
@@ -81,33 +79,40 @@ public class LoginAttemptListener {
         if (user == null) return;
 
         String ip = getClientIp();
-        int recentFailed = recordAndCountFailedAttempt(username); // Liczymy błędne próby z pamięci RAM
+        int recentFailed = recordAndCountFailedAttempt(username);
 
         droolsSecurityService.evaluateLoginAttempt(user.getId(), username, true, ip, recentFailed);
     }
 
+    /**
+     * Rejestruje nieudaną próbę w pamięci podręcznej i zwraca aktualną liczbę błędów.
+     */
     private int recordAndCountFailedAttempt(String username) {
         List<LocalDateTime> attempts = failedAttempts.computeIfAbsent(username, k -> new ArrayList<>());
         LocalDateTime now = LocalDateTime.now();
         attempts.add(now);
-        // Usuwamy próby starsze niż 3 minuty
+        // Oczyszczanie prób starszych niż 3 minuty
         attempts.removeIf(time -> time.isBefore(now.minusMinutes(3)));
         return attempts.size();
     }
 
+    /**
+     * Wymusza natychmiastowe unieważnienie sesji i wyczyszczenie kontekstu bezpieczeństwa.
+     */
     private void forceLogoutImmediately() {
         SecurityContextHolder.clearContext();
         HttpServletRequest request = getCurrentRequest();
         if (request != null) {
             HttpSession session = request.getSession(false);
             if (session != null) {
-                session.invalidate(); // Natychmiastowe ubicie sesji na poziomie serwera
+                session.invalidate();
             }
         }
     }
 
-    // ---- Metody pomocnicze ----
-
+    /**
+     * Zapisuje nową sesję użytkownika w bazie danych.
+     */
     private void registerSession(AppUser user, String ip) {
         try {
             HttpServletRequest request = getCurrentRequest();
@@ -133,16 +138,7 @@ public class LoginAttemptListener {
         }
     }
 
-    /**
-     * Zlicza nieudane próby logowania dla użytkownika z ostatnich 3 minut.
-     * Uproszczone: liczymy alerty BRUTE_FORCE z security_alert.
-     * W produkcji warto mieć osobną tabelę failed_login_attempts dla wydajności.
-     */
-    private int countRecentFailedAttempts(Long userId) {
-        // Pobieramy alerty BRUTE_FORCE z ostatnich 3 minut jako proxy
-        // Rzeczywista implementacja powinna liczyć z osobnej, szybkiej tabeli
-        return securityAlertRepository.countRecentAlertsByLevel(userId, 3, "HIGH");
-    }
+    //
 
     private String extractUsername(Object principal) {
         if (principal instanceof UserDetails ud) return ud.getUsername();
