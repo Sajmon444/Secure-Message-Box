@@ -31,10 +31,11 @@ public class AccountUnblockScheduler {
     @Scheduled(fixedDelayString = "PT60M")
     @Transactional
     public void unblockExpiredAccounts() {
-        LocalDateTime now = LocalDateTime.now();
-        int count = appUserRepository.unblockExpiredAccounts(now);
+        // Wywołujemy zaktualizowaną metodę wywołującą funkcję SQL
+        int count = appUserRepository.unblockExpiredAccounts();
+
         if (count > 0) {
-            log.info("[SCHEDULER] Odblokowano {} kont z wygasłą blokadą (stan na: {})", count, now);
+            log.info("[SCHEDULER] Odblokowano {} kont z wygasłą blokadą (stan na: {})", count, LocalDateTime.now());
         }
     }
 }

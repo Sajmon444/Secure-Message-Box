@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 /**
  * Alert bezpieczeństwa generowany przez silnik reguł Drools.
  *
- * Poziomy ważności (severity_level) są spójne z tabelą alert_severity:
+ * Poziomy ważności (severity_level):
  *   LOW    → zdarzenie monitorowane, brak natychmiastowej akcji
  *   MEDIUM → wiadomość zablokowana lub podejrzane zachowanie
  *   HIGH   → konto zablokowane, wszystkie sesje unieważnione
@@ -47,7 +47,6 @@ public class SecurityAlert {
 
     /**
      * Poziom ważności: LOW | MEDIUM | HIGH
-     * Spójny z tabelą alert_severity (severity_code).
      */
     @Column(name = "severity_level", nullable = false, length = 10)
     private String severityLevel;
